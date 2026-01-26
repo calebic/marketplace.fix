@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,6 +32,12 @@ public partial class MainWindow : Window
     private ICollectionView? _configsView;
     private readonly AutoFillSettings _autoFillSettings = AutoFillSettings.CreateDefaults();
     private bool _hasUnsavedChanges;
+    private bool _isLoadingForm;
+    private bool _isScanning;
+    private CancellationTokenSource? _scanCts;
+    private CancellationTokenSource? _searchCts;
+    private readonly Dictionary<string, Dictionary<string, double>> _partValueCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _partValueCacheLock = new();
 
     public ObservableCollection<VehicleConfigItem> Configs { get; } = new();
 
@@ -69,8 +76,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ScanMods_Click(object sender, RoutedEventArgs e)
+    private async void ScanMods_Click(object sender, RoutedEventArgs e)
     {
+        if (_isScanning)
+        {
+            _scanCts?.Cancel();
+            return;
+        }
+
         var modsPath = ModsPathTextBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(modsPath) || !Directory.Exists(modsPath))
         {
@@ -79,7 +92,38 @@ public partial class MainWindow : Window
             return;
         }
 
-        LoadConfigs(modsPath);
+        _isScanning = true;
+        ScanButton.IsEnabled = false;
+        BrowseButton.IsEnabled = false;
+        StatusTextBlock.Text = "Scanning mods...";
+
+        _scanCts = new CancellationTokenSource();
+        try
+        {
+            var (items, errors) = await Task.Run(() => CollectConfigs(modsPath, _scanCts.Token), _scanCts.Token);
+            Configs.Clear();
+            foreach (var item in items)
+            {
+                Configs.Add(item);
+            }
+
+            _selected = null;
+            ClearForm();
+            SetupConfigsView();
+            StatusTextBlock.Text = $"Loaded {items.Count} configs. Errors: {errors}.";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusTextBlock.Text = "Scan canceled.";
+        }
+        finally
+        {
+            _scanCts?.Dispose();
+            _scanCts = null;
+            _isScanning = false;
+            ScanButton.IsEnabled = true;
+            BrowseButton.IsEnabled = true;
+        }
     }
 
     private void ConfigsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -201,24 +245,21 @@ public partial class MainWindow : Window
         }
     }
 
-    private void LoadConfigs(string modsPath)
+    private (List<VehicleConfigItem> items, int errors) CollectConfigs(string modsPath, CancellationToken token)
     {
-        Configs.Clear();
-        _selected = null;
-        ClearForm();
-
-        var added = 0;
+        var items = new List<VehicleConfigItem>();
         var errors = 0;
 
         foreach (var modDir in Directory.EnumerateDirectories(modsPath))
         {
+            token.ThrowIfCancellationRequested();
             var dirName = Path.GetFileName(modDir);
             if (string.Equals(dirName, "unpacked", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            added += LoadFolderMod(modDir, ref errors);
+            AddFolderModConfigs(modDir, dirName, items, ref errors, token);
         }
 
         var unpackedRoot = Path.Combine(modsPath, "unpacked");
@@ -226,17 +267,18 @@ public partial class MainWindow : Window
         {
             foreach (var modDir in Directory.EnumerateDirectories(unpackedRoot))
             {
-                added += LoadFolderMod(modDir, ref errors);
+                token.ThrowIfCancellationRequested();
+                AddFolderModConfigs(modDir, Path.GetFileName(modDir), items, ref errors, token);
             }
         }
 
         foreach (var zipPath in Directory.EnumerateFiles(modsPath, "*.zip"))
         {
-            added += LoadZipMod(zipPath, ref errors);
+            token.ThrowIfCancellationRequested();
+            AddZipModConfigs(zipPath, items, ref errors, token);
         }
 
-        SetupConfigsView();
-        StatusTextBlock.Text = $"Loaded {added} configs. Errors: {errors}.";
+        return (items, errors);
     }
 
     private void SetupConfigsView()
@@ -292,8 +334,25 @@ public partial class MainWindow : Window
 
     private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        _configsView?.Refresh();
-        UpdateEmptyState();
+        _searchCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(200, cts.Token);
+                WpfApplication.Current?.Dispatcher.Invoke(() =>
+                {
+                    _configsView?.Refresh();
+                    UpdateEmptyState();
+                });
+            }
+            catch (TaskCanceledException)
+            {
+                // Ignore.
+            }
+        });
     }
 
     private void FilterControl_Changed(object sender, RoutedEventArgs e)
@@ -341,12 +400,11 @@ public partial class MainWindow : Window
         _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.VehicleName), ListSortDirection.Ascending));
     }
 
-    private int LoadFolderMod(string modDir, ref int errors)
+    private static void AddFolderModConfigs(string modDir, string modName, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
     {
-        var count = 0;
-        var modName = Path.GetFileName(modDir);
         foreach (var filePath in Directory.EnumerateFiles(modDir, "info_*.json", SearchOption.AllDirectories))
         {
+            token.ThrowIfCancellationRequested();
             if (!IsVehicleInfoPath(filePath))
             {
                 continue;
@@ -361,27 +419,24 @@ public partial class MainWindow : Window
                     continue;
                 }
 
-                Configs.Add(item);
-                count++;
+                items.Add(item);
             }
             catch
             {
                 errors++;
             }
         }
-
-        return count;
     }
 
-    private int LoadZipMod(string zipPath, ref int errors)
+    private static void AddZipModConfigs(string zipPath, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
     {
-        var count = 0;
         var modName = Path.GetFileNameWithoutExtension(zipPath);
         try
         {
             using var archive = ZipFile.OpenRead(zipPath);
             foreach (var entry in archive.Entries)
             {
+                token.ThrowIfCancellationRequested();
                 if (!IsVehicleInfoEntry(entry.FullName))
                 {
                     continue;
@@ -395,16 +450,13 @@ public partial class MainWindow : Window
                     continue;
                 }
 
-                Configs.Add(item);
-                count++;
+                items.Add(item);
             }
         }
         catch
         {
             errors++;
         }
-
-        return count;
     }
 
     private static bool TryCreateConfigItem(string modName, string sourcePath, string infoPath, bool isZip, string jsonText, out VehicleConfigItem item)
@@ -457,6 +509,7 @@ public partial class MainWindow : Window
 
     private void LoadForm(VehicleConfigItem item)
     {
+        _isLoadingForm = true;
         ConfigPathText.Text = item.IsZip ? $"{item.SourcePath} :: {item.InfoPath}" : item.InfoPath;
         BrandTextBox.Text = item.Brand ?? string.Empty;
         CountryTextBox.Text = item.Country ?? string.Empty;
@@ -468,16 +521,19 @@ public partial class MainWindow : Window
         YearMaxTextBox.Text = item.YearMax?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         ValueTextBox.Text = item.Value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         PopulationTextBox.Text = item.Population?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        UpdatePopulationPresetFromValue(item.Population);
         PartsAuditTextBox.Text = string.Empty;
 
         var missing = item.GetMissingFields();
         
         UpdateFieldHighlightingFromMissing(missing);
         UpdateSummary(item);
+        _isLoadingForm = false;
     }
 
     private void ClearForm()
     {
+        _isLoadingForm = true;
         ConfigPathText.Text = string.Empty;
         BrandTextBox.Text = string.Empty;
         CountryTextBox.Text = string.Empty;
@@ -495,6 +551,7 @@ public partial class MainWindow : Window
         ConfigSummaryText.Text = string.Empty;
         ResetFieldHighlighting();
         SetDirty(false);
+        _isLoadingForm = false;
     }
 
     private bool TryBuildUpdatedConfig(out JsonObject updated, out string error)
@@ -657,6 +714,11 @@ public partial class MainWindow : Window
 
     private void PopulationPresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isLoadingForm)
+        {
+            return;
+        }
+
         if (PopulationPresetComboBox.SelectedItem is not ComboBoxItem item)
         {
             return;
@@ -690,6 +752,41 @@ public partial class MainWindow : Window
             UpdateMissingFromForm();
         }
         SetDirty(true);
+    }
+
+    private void UpdatePopulationPresetFromValue(int? population)
+    {
+        if (!population.HasValue)
+        {
+            PopulationPresetComboBox.SelectedIndex = 0;
+            return;
+        }
+
+        var value = population.Value;
+        if (value >= 1 && value <= 50)
+        {
+            PopulationPresetComboBox.SelectedIndex = 1;
+        }
+        else if (value > 50 && value <= 200)
+        {
+            PopulationPresetComboBox.SelectedIndex = 2;
+        }
+        else if (value > 200 && value <= 800)
+        {
+            PopulationPresetComboBox.SelectedIndex = 3;
+        }
+        else if (value > 800 && value <= 3000)
+        {
+            PopulationPresetComboBox.SelectedIndex = 4;
+        }
+        else if (value > 3000 && value <= 10000)
+        {
+            PopulationPresetComboBox.SelectedIndex = 5;
+        }
+        else
+        {
+            PopulationPresetComboBox.SelectedIndex = 0;
+        }
     }
 
 
@@ -974,7 +1071,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void AuditParts_Click(object sender, RoutedEventArgs e)
+    private async void AuditParts_Click(object sender, RoutedEventArgs e)
     {
         if (_selected == null)
         {
@@ -983,9 +1080,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        var selected = _selected;
+        PartsAuditTextBox.Text = "Auditing parts... please wait.";
         try
         {
-            PartsAuditTextBox.Text = BuildPartsAudit(_selected);
+            var result = await Task.Run(() => BuildPartsAudit(selected));
+            PartsAuditTextBox.Text = result;
         }
         catch (Exception ex)
         {
@@ -1125,6 +1225,15 @@ public partial class MainWindow : Window
 
     private Dictionary<string, double> BuildPartValueIndex(VehicleConfigItem item)
     {
+        var cacheKey = $"{item.SourcePath}|{item.ModelKey}|{item.IsZip}";
+        lock (_partValueCacheLock)
+        {
+            if (_partValueCache.TryGetValue(cacheKey, out var cached))
+            {
+                return new Dictionary<string, double>(cached, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
         var index = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         var modelPath = $"vehicles/{item.ModelKey}/";
 
@@ -1171,6 +1280,11 @@ public partial class MainWindow : Window
                     // Ignore malformed jbeam files during audit.
                 }
             }
+        }
+
+        lock (_partValueCacheLock)
+        {
+            _partValueCache[cacheKey] = new Dictionary<string, double>(index, StringComparer.OrdinalIgnoreCase);
         }
 
         return index;
