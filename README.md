@@ -1,4 +1,5 @@
 download https://github.com/calebic/marketplace.fix/releases/tag/beamng
+
 Starting off this fixes cars from showing up but sometimes you need to clear cache after saving in the tool. sometimes... you know how this game is. A useful command I used in the video in order to refresh the vehicle marketplace instantly was:
 
 career_modules_vehicleShopping.invalidateVehicleCache()career_modules_vehicleShopping.updateVehicleList(true)
