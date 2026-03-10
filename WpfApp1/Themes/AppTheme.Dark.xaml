@@ -1,0 +1,28 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0B1220" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#121D31" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#111B2E" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#0E192A" />
+    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#0C1524" />
+    <SolidColorBrush x:Key="InputForegroundBrush" Color="#F4F8FF" />
+    <SolidColorBrush x:Key="AppForegroundBrush" Color="#F5F9FF" />
+    <SolidColorBrush x:Key="MutedForegroundBrush" Color="#B4C8E0" />
+    <SolidColorBrush x:Key="FormLabelBrush" Color="#C2D4EA" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#2A3E5D" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#58B0FF" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#F5F9FF" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#62DB8A" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFB25B" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FF7676" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#203750" />
+    <SolidColorBrush x:Key="SelectionForegroundBrush" Color="#F5F9FF" />
+
+    <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#101827" />
+    <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#1A2940" />
+    <SolidColorBrush x:Key="DangerButtonBackgroundBrush" Color="#3A2A33" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#1A2A40" />
+    <SolidColorBrush x:Key="PopupBackgroundBrush" Color="#0D1728" />
+    <SolidColorBrush x:Key="StatusBadgeBackgroundBrush" Color="#1E2F49" />
+    <SolidColorBrush x:Key="GridHeaderBackgroundBrush" Color="#16253C" />
+</ResourceDictionary>

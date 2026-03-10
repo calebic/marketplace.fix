@@ -21,6 +21,7 @@ public sealed class VehicleConfigItem : INotifyPropertyChanged
     public string? BodyStyle { get; set; }
     public string? ConfigType { get; set; }
     public string? Configuration { get; set; }
+    public string? InsuranceClass { get; set; }
     public int? YearMin { get; set; }
     public int? YearMax { get; set; }
     public double? Value { get; set; }
@@ -50,6 +51,7 @@ public sealed class VehicleConfigItem : INotifyPropertyChanged
         OnPropertyChanged(nameof(BodyStyle));
         OnPropertyChanged(nameof(ConfigType));
         OnPropertyChanged(nameof(Configuration));
+        OnPropertyChanged(nameof(InsuranceClass));
         OnPropertyChanged(nameof(YearMin));
         OnPropertyChanged(nameof(YearMax));
         OnPropertyChanged(nameof(Value));
@@ -68,6 +70,7 @@ public sealed class VehicleConfigItem : INotifyPropertyChanged
         if (string.IsNullOrWhiteSpace(BodyStyle)) missing.Add("Body Style");
         if (string.IsNullOrWhiteSpace(ConfigType)) missing.Add("Config Type");
         if (string.IsNullOrWhiteSpace(Configuration)) missing.Add("Configuration");
+        if (string.IsNullOrWhiteSpace(InsuranceClass)) missing.Add("Insurance Class");
         if (!YearMin.HasValue || !YearMax.HasValue) missing.Add("Years");
         if (!Value.HasValue) missing.Add("Value");
         if (!Population.HasValue) missing.Add("Population");

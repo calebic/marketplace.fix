@@ -17,6 +17,9 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media.Animation;
+using System.Windows.Media;
+using ControlzEx.Theming;
+using MahApps.Metro.Controls;
 using Brush = System.Windows.Media.Brush;
 using WpfApplication = System.Windows.Application;
 using WpfControl = System.Windows.Controls.Control;
@@ -25,19 +28,26 @@ using WinForms = System.Windows.Forms;
 
 namespace WpfApp1;
 
-public partial class MainWindow : Window
+public partial class MainWindow : MetroWindow
 {
     private const string DefaultModsPath = @"D:\beamng progress\30\current\mods";
+    private const string DefaultRegion = "northAmerica";
+    private const string DefaultInsuranceClass = "dailyDriver";
+    private static readonly string PersistedSettingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "BeamNGMarketplaceConfigEditor",
+        "settings.json");
+    private static readonly Uri LightThemeDictionaryUri = new("Themes/AppTheme.Light.xaml", UriKind.Relative);
+    private static readonly Uri DarkThemeDictionaryUri = new("Themes/AppTheme.Dark.xaml", UriKind.Relative);
     private VehicleConfigItem? _selected;
     private ICollectionView? _configsView;
     private readonly AutoFillSettings _autoFillSettings = AutoFillSettings.CreateDefaults();
     private bool _hasUnsavedChanges;
     private bool _isLoadingForm;
     private bool _isScanning;
+    private bool _suppressSettingsSave;
     private CancellationTokenSource? _scanCts;
     private CancellationTokenSource? _searchCts;
-    private readonly Dictionary<string, Dictionary<string, double>> _partValueCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _partValueCacheLock = new();
 
     public ObservableCollection<VehicleConfigItem> Configs { get; } = new();
 
@@ -45,13 +55,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = this;
-        if (Directory.Exists(DefaultModsPath))
+        LoadPersistedUiSettings();
+        if (string.IsNullOrWhiteSpace(ModsPathTextBox.Text) && Directory.Exists(DefaultModsPath))
         {
             ModsPathTextBox.Text = DefaultModsPath;
         }
         StatusTextBlock.Text = "Select a mods folder and click Scan.";
         SetupConfigsView();
-        LoadAutoFillSettingsIntoUi();
         StateChanged += (_, _) =>
         {
             if (WindowState != WindowState.Minimized)
@@ -59,6 +69,7 @@ public partial class MainWindow : Window
                 Opacity = 1;
             }
         };
+        Closing += (_, _) => SavePersistedSettings();
     }
 
     private void BrowseMods_Click(object sender, RoutedEventArgs e)
@@ -159,18 +170,18 @@ public partial class MainWindow : Window
 
         if (_autoFillSettings.UseYear)
         {
-            if (string.IsNullOrWhiteSpace(YearMinTextBox.Text)) YearMinTextBox.Text = defaultYear.ToString(CultureInfo.InvariantCulture);
-            if (string.IsNullOrWhiteSpace(YearMaxTextBox.Text)) YearMaxTextBox.Text = defaultYear.ToString(CultureInfo.InvariantCulture);
+            if (!ReadInteger(YearMinUpDown.Value).HasValue) YearMinUpDown.Value = defaultYear;
+            if (!ReadInteger(YearMaxUpDown.Value).HasValue) YearMaxUpDown.Value = defaultYear;
         }
 
-        if (_autoFillSettings.UseValue && string.IsNullOrWhiteSpace(ValueTextBox.Text))
+        if (_autoFillSettings.UseValue && !ValueUpDown.Value.HasValue)
         {
-            ValueTextBox.Text = _autoFillSettings.Value.ToString(CultureInfo.InvariantCulture);
+            ValueUpDown.Value = _autoFillSettings.Value;
         }
 
-        if (_autoFillSettings.UsePopulation && string.IsNullOrWhiteSpace(PopulationTextBox.Text))
+        if (_autoFillSettings.UsePopulation && !ReadInteger(PopulationUpDown.Value).HasValue)
         {
-            PopulationTextBox.Text = _autoFillSettings.Population.ToString(CultureInfo.InvariantCulture);
+            PopulationUpDown.Value = _autoFillSettings.Population;
         }
 
         UpdateMissingFromForm();
@@ -198,11 +209,20 @@ public partial class MainWindow : Window
         var json = updated.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         try
         {
-            WriteConfig(_selected, json);
+            var mirrorResult = WriteConfig(_selected, json);
             _selected.NotifyChanges();
             LoadForm(_selected);
             SetDirty(false);
-            StatusTextBlock.Text = $"Saved {_selected.ConfigKey} ({_selected.ModName}).";
+            StatusTextBlock.Text = $"Saved {_selected.ConfigKey} ({_selected.ModName}).{mirrorResult.BuildStatusSuffix(_selected.ModelKey)}";
+
+            if (!string.IsNullOrWhiteSpace(mirrorResult.HardError))
+            {
+                System.Windows.MessageBox.Show(
+                    mirrorResult.HardError,
+                    "Input Into Vehicles",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
         catch (Exception ex)
         {
@@ -376,12 +396,12 @@ public partial class MainWindow : Window
 
     private void UpdateEmptyState()
     {
-        if (_configsView == null || EmptyStateTextBlock == null)
+        if (_configsView == null || EmptyStateContainer == null)
         {
             return;
         }
 
-        EmptyStateTextBlock.Visibility = _configsView.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+        EmptyStateContainer.Visibility = _configsView.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ApplySorting()
@@ -517,12 +537,12 @@ public partial class MainWindow : Window
         BodyStyleTextBox.Text = item.BodyStyle ?? string.Empty;
         ConfigTypeTextBox.Text = item.ConfigType ?? string.Empty;
         ConfigurationTextBox.Text = item.Configuration ?? string.Empty;
-        YearMinTextBox.Text = item.YearMin?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-        YearMaxTextBox.Text = item.YearMax?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-        ValueTextBox.Text = item.Value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-        PopulationTextBox.Text = item.Population?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        SelectInsuranceClass(item.InsuranceClass);
+        YearMinUpDown.Value = item.YearMin;
+        YearMaxUpDown.Value = item.YearMax;
+        ValueUpDown.Value = item.Value;
+        PopulationUpDown.Value = item.Population;
         UpdatePopulationPresetFromValue(item.Population);
-        PartsAuditTextBox.Text = string.Empty;
 
         var missing = item.GetMissingFields();
         
@@ -541,12 +561,12 @@ public partial class MainWindow : Window
         BodyStyleTextBox.Text = string.Empty;
         ConfigTypeTextBox.Text = string.Empty;
         ConfigurationTextBox.Text = string.Empty;
-        YearMinTextBox.Text = string.Empty;
-        YearMaxTextBox.Text = string.Empty;
-        ValueTextBox.Text = string.Empty;
-        PopulationTextBox.Text = string.Empty;
-        
-        PartsAuditTextBox.Text = string.Empty;
+        SelectInsuranceClass(DefaultInsuranceClass);
+        YearMinUpDown.Value = null;
+        YearMaxUpDown.Value = null;
+        ValueUpDown.Value = null;
+        PopulationUpDown.Value = null;
+
         PopulationPresetComboBox.SelectedIndex = 0;
         ConfigSummaryText.Text = string.Empty;
         ResetFieldHighlighting();
@@ -571,6 +591,7 @@ public partial class MainWindow : Window
         var bodyStyle = BodyStyleTextBox.Text.Trim();
         var configType = ConfigTypeTextBox.Text.Trim();
         var configuration = ConfigurationTextBox.Text.Trim();
+        var insuranceClass = GetSelectedInsuranceClass();
 
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(brand)) errors.Add("Brand");
@@ -579,23 +600,27 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(bodyStyle)) errors.Add("Body Style");
         if (string.IsNullOrWhiteSpace(configType)) errors.Add("Config Type");
         if (string.IsNullOrWhiteSpace(configuration)) errors.Add("Configuration");
+        if (string.IsNullOrWhiteSpace(insuranceClass)) errors.Add("Insurance Class");
 
-        if (!int.TryParse(YearMinTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var yearMin))
+        var yearMin = ReadInteger(YearMinUpDown.Value);
+        if (!yearMin.HasValue)
         {
             errors.Add("Year Min");
         }
 
-        if (!int.TryParse(YearMaxTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var yearMax))
+        var yearMax = ReadInteger(YearMaxUpDown.Value);
+        if (!yearMax.HasValue)
         {
             errors.Add("Year Max");
         }
 
-        if (errors.Count == 0 && yearMin > yearMax)
+        if (errors.Count == 0 && yearMin!.Value > yearMax!.Value)
         {
             errors.Add("Year Min must be <= Year Max");
         }
 
-        if (!double.TryParse(ValueTextBox.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        var value = ValueUpDown.Value;
+        if (!value.HasValue)
         {
             errors.Add("Value");
         }
@@ -613,16 +638,19 @@ public partial class MainWindow : Window
         updated["Body Style"] = bodyStyle;
         updated["Config Type"] = configType;
         updated["Configuration"] = configuration;
+        updated["InsuranceClass"] = insuranceClass;
+        updated["Region"] = DefaultRegion;
         updated["Years"] = new JsonObject
         {
-            ["min"] = yearMin,
-            ["max"] = yearMax
+            ["min"] = yearMin!.Value,
+            ["max"] = yearMax!.Value
         };
-        updated["Value"] = value;
+        updated["Value"] = value!.Value;
 
-        if (int.TryParse(PopulationTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var population))
+        var population = ReadInteger(PopulationUpDown.Value);
+        if (population.HasValue)
         {
-            updated["Population"] = population;
+            updated["Population"] = population.Value;
         }
         else
         {
@@ -641,6 +669,7 @@ public partial class MainWindow : Window
         item.BodyStyle = ReadStringOrAggregate(root, "Body Style");
         item.ConfigType = ReadStringOrAggregate(root, "Config Type");
         item.Configuration = ReadString(root, "Configuration");
+        item.InsuranceClass = ReadStringOrAggregate(root, "InsuranceClass") ?? DefaultInsuranceClass;
 
         var years = ReadYears(root);
         item.YearMin = years.min;
@@ -660,23 +689,24 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(BodyStyleTextBox.Text)) missing.Add("Body Style");
         if (string.IsNullOrWhiteSpace(ConfigTypeTextBox.Text)) missing.Add("Config Type");
         if (string.IsNullOrWhiteSpace(ConfigurationTextBox.Text)) missing.Add("Configuration");
+        if (string.IsNullOrWhiteSpace(GetSelectedInsuranceClass())) missing.Add("Insurance Class");
 
-        if (!int.TryParse(YearMinTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+        if (!ReadInteger(YearMinUpDown.Value).HasValue)
         {
             missing.Add("Years");
         }
 
-        if (!int.TryParse(YearMaxTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+        if (!ReadInteger(YearMaxUpDown.Value).HasValue)
         {
             if (!missing.Contains("Years")) missing.Add("Years");
         }
 
-        if (!double.TryParse(ValueTextBox.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+        if (!ValueUpDown.Value.HasValue)
         {
             missing.Add("Value");
         }
 
-        if (!int.TryParse(PopulationTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+        if (!ReadInteger(PopulationUpDown.Value).HasValue)
         {
             missing.Add("Population");
         }
@@ -692,11 +722,9 @@ public partial class MainWindow : Window
     private void UpdateSummaryFromForm(IReadOnlyCollection<string> missing)
     {
         var missingText = missing.Count == 0 ? "OK" : $"{missing.Count} missing";
-        var populationText = int.TryParse(PopulationTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var pop)
-            ? pop.ToString(CultureInfo.InvariantCulture)
-            : "Missing";
-        var valueText = double.TryParse(ValueTextBox.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var val)
-            ? val.ToString("0", CultureInfo.InvariantCulture)
+        var populationText = ReadInteger(PopulationUpDown.Value)?.ToString(CultureInfo.InvariantCulture) ?? "Missing";
+        var valueText = ValueUpDown.Value.HasValue
+            ? ValueUpDown.Value.Value.ToString("0", CultureInfo.InvariantCulture)
             : "Missing";
 
         ConfigSummaryText.Text = $"Missing: {missingText}  •  Population: {populationText}  •  Value: {valueText}";
@@ -728,30 +756,70 @@ public partial class MainWindow : Window
         switch (preset)
         {
             case "Ultra-rare (1-50)":
-                PopulationTextBox.Text = "25";
+                PopulationUpDown.Value = 25;
                 break;
             case "Rare (50-200)":
-                PopulationTextBox.Text = "100";
+                PopulationUpDown.Value = 100;
                 break;
             case "Uncommon (200-800)":
-                PopulationTextBox.Text = "400";
+                PopulationUpDown.Value = 400;
                 break;
             case "Common (800-3000)":
-                PopulationTextBox.Text = "1500";
+                PopulationUpDown.Value = 1500;
                 break;
             case "Very common (3000-10000)":
-                PopulationTextBox.Text = "6000";
+                PopulationUpDown.Value = 6000;
                 break;
             default:
                 return;
         }
 
         UpdateMissingFromForm();
-        if (_selected != null)
-        {
-            UpdateMissingFromForm();
-        }
         SetDirty(true);
+    }
+
+    private void InsuranceClassComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingForm)
+        {
+            return;
+        }
+
+        UpdateMissingFromForm();
+        SetDirty(true);
+    }
+
+    private string GetSelectedInsuranceClass()
+    {
+        if (InsuranceClassComboBox.SelectedItem is ComboBoxItem selectedItem)
+        {
+            var value = selectedItem.Content?.ToString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return DefaultInsuranceClass;
+    }
+
+    private void SelectInsuranceClass(string? insuranceClass)
+    {
+        var target = string.IsNullOrWhiteSpace(insuranceClass)
+            ? DefaultInsuranceClass
+            : insuranceClass.Trim();
+
+        foreach (var item in InsuranceClassComboBox.Items.OfType<ComboBoxItem>())
+        {
+            var value = item.Content?.ToString();
+            if (string.Equals(value, target, StringComparison.OrdinalIgnoreCase))
+            {
+                InsuranceClassComboBox.SelectedItem = item;
+                return;
+            }
+        }
+
+        InsuranceClassComboBox.SelectedIndex = 0;
     }
 
     private void UpdatePopulationPresetFromValue(int? population)
@@ -789,11 +857,107 @@ public partial class MainWindow : Window
         }
     }
 
+    private void LoadPersistedUiSettings()
+    {
+        var persisted = ReadPersistedSettings();
+
+        _suppressSettingsSave = true;
+        try
+        {
+            if (persisted?.AutoFill != null)
+            {
+                _autoFillSettings.ApplyFrom(persisted.AutoFill);
+            }
+
+            ThemeToggleSwitch.IsOn = persisted?.IsDarkTheme ?? false;
+            BackupToggleSwitch.IsOn = persisted?.BackupBeforeSave ?? false;
+            VehiclesToggleSwitch.IsOn = persisted?.InputIntoVehicles ?? false;
+
+            ApplyTheme(ThemeToggleSwitch.IsOn);
+            LoadAutoFillSettingsIntoUi();
+        }
+        finally
+        {
+            _suppressSettingsSave = false;
+        }
+    }
+
+    private static PersistedUiSettings? ReadPersistedSettings()
+    {
+        if (!File.Exists(PersistedSettingsPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(PersistedSettingsPath, Encoding.UTF8);
+            return JsonSerializer.Deserialize<PersistedUiSettings>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void SavePersistedSettings()
+    {
+        if (_suppressSettingsSave)
+        {
+            return;
+        }
+
+        try
+        {
+            var directory = Path.GetDirectoryName(PersistedSettingsPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var snapshot = new PersistedUiSettings
+            {
+                IsDarkTheme = ThemeToggleSwitch?.IsOn == true,
+                BackupBeforeSave = BackupToggleSwitch?.IsOn == true,
+                InputIntoVehicles = VehiclesToggleSwitch?.IsOn == true,
+                AutoFill = _autoFillSettings.Clone()
+            };
+
+            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            File.WriteAllText(PersistedSettingsPath, json, new UTF8Encoding(false));
+        }
+        catch
+        {
+            // Keep app flow non-blocking if settings persistence fails.
+        }
+    }
+
 
     private void AutoFillSettingsButton_Click(object sender, RoutedEventArgs e)
     {
+        if (HelpPopup.IsOpen)
+        {
+            HelpPopup.IsOpen = false;
+        }
+
         LoadAutoFillSettingsIntoUi();
-        AutoFillSettingsPopup.IsOpen = true;
+        AutoFillSettingsPopup.IsOpen = !AutoFillSettingsPopup.IsOpen;
+    }
+
+    private void HelpButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (AutoFillSettingsPopup.IsOpen)
+        {
+            AutoFillSettingsPopup.IsOpen = false;
+        }
+
+        HelpPopup.IsOpen = !HelpPopup.IsOpen;
     }
 
     private void AutoFillSettingsSave_Click(object sender, RoutedEventArgs e)
@@ -804,22 +968,42 @@ public partial class MainWindow : Window
         var value = _autoFillSettings.Value;
         var population = _autoFillSettings.Population;
 
-        if (AutoYearCheckBox.IsChecked == true &&
-            !int.TryParse(AutoYearTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out year))
+        if (AutoYearCheckBox.IsChecked == true)
         {
-            errors.Add("Default Year");
+            var parsedYear = ReadInteger(AutoYearUpDown.Value);
+            if (!parsedYear.HasValue)
+            {
+                errors.Add("Default Year");
+            }
+            else
+            {
+                year = parsedYear.Value;
+            }
         }
 
-        if (AutoValueCheckBox.IsChecked == true &&
-            !double.TryParse(AutoValueTextBox.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+        if (AutoValueCheckBox.IsChecked == true)
         {
-            errors.Add("Value");
+            if (!AutoValueUpDown.Value.HasValue)
+            {
+                errors.Add("Value");
+            }
+            else
+            {
+                value = AutoValueUpDown.Value.Value;
+            }
         }
 
-        if (AutoPopulationCheckBox.IsChecked == true &&
-            !int.TryParse(AutoPopulationTextBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out population))
+        if (AutoPopulationCheckBox.IsChecked == true)
         {
-            errors.Add("Population");
+            var parsedPopulation = ReadInteger(AutoPopulationUpDown.Value);
+            if (!parsedPopulation.HasValue)
+            {
+                errors.Add("Population");
+            }
+            else
+            {
+                population = parsedPopulation.Value;
+            }
         }
 
         if (errors.Count > 0)
@@ -846,11 +1030,28 @@ public partial class MainWindow : Window
         _autoFillSettings.UseValue = AutoValueCheckBox.IsChecked == true;
         _autoFillSettings.UsePopulation = AutoPopulationCheckBox.IsChecked == true;
 
+        SavePersistedSettings();
         AutoFillSettingsPopup.IsOpen = false;
     }
 
     private void FieldTextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_isLoadingForm)
+        {
+            return;
+        }
+
+        UpdateMissingFromForm();
+        SetDirty(true);
+    }
+
+    private void NumericFieldChanged(object sender, RoutedPropertyChangedEventArgs<double?> e)
+    {
+        if (_isLoadingForm)
+        {
+            return;
+        }
+
         UpdateMissingFromForm();
         SetDirty(true);
     }
@@ -874,9 +1075,10 @@ public partial class MainWindow : Window
         if (missing.Contains("Body Style")) { FocusField(BodyStyleTextBox); return; }
         if (missing.Contains("Config Type")) { FocusField(ConfigTypeTextBox); return; }
         if (missing.Contains("Configuration")) { FocusField(ConfigurationTextBox); return; }
-        if (missing.Contains("Years")) { FocusField(YearMinTextBox); return; }
-        if (missing.Contains("Value")) { FocusField(ValueTextBox); return; }
-        if (missing.Contains("Population")) { FocusField(PopulationTextBox); return; }
+        if (missing.Contains("Insurance Class")) { FocusField(InsuranceClassComboBox); return; }
+        if (missing.Contains("Years")) { FocusField(YearMinUpDown); return; }
+        if (missing.Contains("Value")) { FocusField(ValueUpDown); return; }
+        if (missing.Contains("Population")) { FocusField(PopulationUpDown); return; }
     }
 
     private static void FocusField(WpfControl control)
@@ -892,9 +1094,9 @@ public partial class MainWindow : Window
         AutoTypeTextBox.Text = _autoFillSettings.Type;
         AutoBodyStyleTextBox.Text = _autoFillSettings.BodyStyle;
         AutoConfigTypeTextBox.Text = _autoFillSettings.ConfigType;
-        AutoYearTextBox.Text = (_autoFillSettings.Year ?? DateTime.Now.Year).ToString(CultureInfo.InvariantCulture);
-        AutoValueTextBox.Text = _autoFillSettings.Value.ToString(CultureInfo.InvariantCulture);
-        AutoPopulationTextBox.Text = _autoFillSettings.Population.ToString(CultureInfo.InvariantCulture);
+        AutoYearUpDown.Value = _autoFillSettings.Year ?? DateTime.Now.Year;
+        AutoValueUpDown.Value = _autoFillSettings.Value;
+        AutoPopulationUpDown.Value = _autoFillSettings.Population;
         AutoBrandCheckBox.IsChecked = _autoFillSettings.UseBrand;
         AutoCountryCheckBox.IsChecked = _autoFillSettings.UseCountry;
         AutoTypeCheckBox.IsChecked = _autoFillSettings.UseType;
@@ -926,6 +1128,157 @@ public partial class MainWindow : Window
     private void Close_Click(object sender, RoutedEventArgs e)
     {
         SystemCommands.CloseWindow(this);
+    }
+
+    private void Window_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        var active = Keyboard.FocusedElement as DependencyObject;
+        var inTextInput = active is WpfTextBox;
+
+        if (e.Key == Key.Escape && AutoFillSettingsPopup.IsOpen)
+        {
+            AutoFillSettingsPopup.IsOpen = false;
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && HelpPopup.IsOpen)
+        {
+            HelpPopup.IsOpen = false;
+            e.Handled = true;
+            return;
+        }
+
+        if (!inTextInput && ctrl && e.Key == Key.F)
+        {
+            SearchTextBox.Focus();
+            SearchTextBox.SelectAll();
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Key.S)
+        {
+            SaveChanges_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Key.R)
+        {
+            ReloadSelected_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (!inTextInput && ctrl && e.Key == Key.A)
+        {
+            AutoFillMissing_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (!inTextInput && e.Key is Key.Down or Key.Up)
+        {
+            if (ConfigsGrid.Items.Count == 0)
+            {
+                return;
+            }
+
+            var idx = ConfigsGrid.SelectedIndex;
+            if (idx < 0)
+            {
+                idx = 0;
+            }
+            else
+            {
+                idx += e.Key == Key.Down ? 1 : -1;
+                idx = Math.Clamp(idx, 0, ConfigsGrid.Items.Count - 1);
+            }
+
+            ConfigsGrid.SelectedIndex = idx;
+            ConfigsGrid.ScrollIntoView(ConfigsGrid.SelectedItem);
+            e.Handled = true;
+        }
+    }
+
+    private void ThemeToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(ThemeToggleSwitch.IsOn);
+        SavePersistedSettings();
+    }
+
+    private void BackupToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        SavePersistedSettings();
+    }
+
+    private void VehiclesToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        SavePersistedSettings();
+    }
+
+    private void ApplyTheme(bool isDark)
+    {
+        ThemeManager.Current.ChangeTheme(this, isDark ? "Dark.Blue" : "Light.Blue");
+        ReplaceThemeDictionary(isDark ? DarkThemeDictionaryUri : LightThemeDictionaryUri);
+    }
+
+    private static void ReplaceThemeDictionary(Uri themeDictionaryUri)
+    {
+        var app = WpfApplication.Current;
+        if (app == null)
+        {
+            return;
+        }
+
+        var dictionaries = app.Resources.MergedDictionaries;
+        var oldThemeDictionary = dictionaries.FirstOrDefault(d =>
+            d.Source != null &&
+            (d.Source.OriginalString.Contains("AppTheme.Light.xaml", StringComparison.OrdinalIgnoreCase) ||
+             d.Source.OriginalString.Contains("AppTheme.Dark.xaml", StringComparison.OrdinalIgnoreCase)));
+
+        var newThemeDictionary = new ResourceDictionary { Source = themeDictionaryUri };
+        if (oldThemeDictionary != null)
+        {
+            var index = dictionaries.IndexOf(oldThemeDictionary);
+            dictionaries.RemoveAt(index);
+            dictionaries.Insert(index, newThemeDictionary);
+            return;
+        }
+
+        var stylesIndex = dictionaries
+            .Select((dictionary, index) => new { dictionary, index })
+            .FirstOrDefault(x => x.dictionary.Source != null &&
+                                 x.dictionary.Source.OriginalString.Contains("AppControlStyles.xaml", StringComparison.OrdinalIgnoreCase))
+            ?.index;
+
+        if (stylesIndex.HasValue)
+        {
+            dictionaries.Insert(stylesIndex.Value, newThemeDictionary);
+        }
+        else
+        {
+            dictionaries.Add(newThemeDictionary);
+        }
+    }
+
+    private static int? ReadInteger(double? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        var rounded = Math.Round(value.Value);
+        if (Math.Abs(value.Value - rounded) > 0.0001d)
+        {
+            return null;
+        }
+
+        return (int)rounded;
     }
 
     private void ToggleMaximize()
@@ -971,6 +1324,14 @@ public partial class MainWindow : Window
         return tcs.Task;
     }
 
+    private sealed class PersistedUiSettings
+    {
+        public bool IsDarkTheme { get; set; }
+        public bool BackupBeforeSave { get; set; }
+        public bool InputIntoVehicles { get; set; }
+        public AutoFillSettings AutoFill { get; set; } = AutoFillSettings.CreateDefaults();
+    }
+
     private sealed class AutoFillSettings
     {
         public string Brand { get; set; } = "Custom";
@@ -990,14 +1351,57 @@ public partial class MainWindow : Window
         public bool UseValue { get; set; } = true;
         public bool UsePopulation { get; set; } = true;
 
+        public AutoFillSettings Clone()
+        {
+            return new AutoFillSettings
+            {
+                Brand = Brand,
+                Country = Country,
+                Type = Type,
+                BodyStyle = BodyStyle,
+                ConfigType = ConfigType,
+                Year = Year,
+                Value = Value,
+                Population = Population,
+                UseBrand = UseBrand,
+                UseCountry = UseCountry,
+                UseType = UseType,
+                UseBodyStyle = UseBodyStyle,
+                UseConfigType = UseConfigType,
+                UseYear = UseYear,
+                UseValue = UseValue,
+                UsePopulation = UsePopulation
+            };
+        }
+
+        public void ApplyFrom(AutoFillSettings settings)
+        {
+            Brand = settings.Brand ?? Brand;
+            Country = settings.Country ?? Country;
+            Type = settings.Type ?? Type;
+            BodyStyle = settings.BodyStyle ?? BodyStyle;
+            ConfigType = settings.ConfigType ?? ConfigType;
+            Year = settings.Year;
+            Value = settings.Value;
+            Population = settings.Population;
+            UseBrand = settings.UseBrand;
+            UseCountry = settings.UseCountry;
+            UseType = settings.UseType;
+            UseBodyStyle = settings.UseBodyStyle;
+            UseConfigType = settings.UseConfigType;
+            UseYear = settings.UseYear;
+            UseValue = settings.UseValue;
+            UsePopulation = settings.UsePopulation;
+        }
+
         public static AutoFillSettings CreateDefaults() => new();
     }
 
     private void UpdateFieldHighlightingFromMissing(IReadOnlyCollection<string> missing)
     {
         ResetFieldHighlighting();
-        var badBrush = (Brush)(WpfApplication.Current?.TryFindResource("BadText") ?? System.Windows.Media.Brushes.Red);
-        var defaultBorder = (Brush)(WpfApplication.Current?.TryFindResource("CardBorder") ?? System.Windows.Media.Brushes.Gray);
+        var badBrush = (Brush)(WpfApplication.Current?.TryFindResource("ErrorBrush") ?? System.Windows.Media.Brushes.Red);
+        var defaultBorder = (Brush)(WpfApplication.Current?.TryFindResource("BorderBrush") ?? System.Windows.Media.Brushes.Gray);
 
         SetFieldHighlight(BrandLabel, BrandTextBox, missing.Contains("Brand"), badBrush, defaultBorder);
         SetFieldHighlight(CountryLabel, CountryTextBox, missing.Contains("Country"), badBrush, defaultBorder);
@@ -1005,19 +1409,20 @@ public partial class MainWindow : Window
         SetFieldHighlight(BodyStyleLabel, BodyStyleTextBox, missing.Contains("Body Style"), badBrush, defaultBorder);
         SetFieldHighlight(ConfigTypeLabel, ConfigTypeTextBox, missing.Contains("Config Type"), badBrush, defaultBorder);
         SetFieldHighlight(ConfigurationLabel, ConfigurationTextBox, missing.Contains("Configuration"), badBrush, defaultBorder);
-        SetFieldHighlight(ValueLabel, ValueTextBox, missing.Contains("Value"), badBrush, defaultBorder);
-        SetFieldHighlight(PopulationLabel, PopulationTextBox, missing.Contains("Population"), badBrush, defaultBorder);
+        SetFieldHighlight(InsuranceClassLabel, InsuranceClassComboBox, missing.Contains("Insurance Class"), badBrush, defaultBorder);
+        SetFieldHighlight(ValueLabel, ValueUpDown, missing.Contains("Value"), badBrush, defaultBorder);
+        SetFieldHighlight(PopulationLabel, PopulationUpDown, missing.Contains("Population"), badBrush, defaultBorder);
         if (missing.Contains("Years"))
         {
-            SetFieldHighlight(YearMinLabel, YearMinTextBox, true, badBrush, defaultBorder);
-            SetFieldHighlight(YearMaxLabel, YearMaxTextBox, true, badBrush, defaultBorder);
+            SetFieldHighlight(YearMinLabel, YearMinUpDown, true, badBrush, defaultBorder);
+            SetFieldHighlight(YearMaxLabel, YearMaxUpDown, true, badBrush, defaultBorder);
         }
     }
 
     private void ResetFieldHighlighting()
     {
-        var defaultBrush = (Brush)(WpfApplication.Current?.TryFindResource("TextPrimary") ?? System.Windows.Media.Brushes.White);
-        var defaultBorder = (Brush)(WpfApplication.Current?.TryFindResource("CardBorder") ?? System.Windows.Media.Brushes.Gray);
+        var defaultBrush = (Brush)(WpfApplication.Current?.TryFindResource("FormLabelBrush") ?? System.Windows.Media.Brushes.Gray);
+        var defaultBorder = (Brush)(WpfApplication.Current?.TryFindResource("BorderBrush") ?? System.Windows.Media.Brushes.Gray);
 
         BrandLabel.Foreground = defaultBrush;
         CountryLabel.Foreground = defaultBrush;
@@ -1025,23 +1430,26 @@ public partial class MainWindow : Window
         BodyStyleLabel.Foreground = defaultBrush;
         ConfigTypeLabel.Foreground = defaultBrush;
         ConfigurationLabel.Foreground = defaultBrush;
+        InsuranceClassLabel.Foreground = defaultBrush;
         YearMinLabel.Foreground = defaultBrush;
         YearMaxLabel.Foreground = defaultBrush;
         ValueLabel.Foreground = defaultBrush;
         PopulationLabel.Foreground = defaultBrush;
+        PopulationPresetLabel.Foreground = defaultBrush;
         ResetFieldBorder(BrandTextBox, defaultBorder);
         ResetFieldBorder(CountryTextBox, defaultBorder);
         ResetFieldBorder(TypeTextBox, defaultBorder);
         ResetFieldBorder(BodyStyleTextBox, defaultBorder);
         ResetFieldBorder(ConfigTypeTextBox, defaultBorder);
         ResetFieldBorder(ConfigurationTextBox, defaultBorder);
-        ResetFieldBorder(YearMinTextBox, defaultBorder);
-        ResetFieldBorder(YearMaxTextBox, defaultBorder);
-        ResetFieldBorder(ValueTextBox, defaultBorder);
-        ResetFieldBorder(PopulationTextBox, defaultBorder);
+        ResetFieldBorder(InsuranceClassComboBox, defaultBorder);
+        ResetFieldBorder(YearMinUpDown, defaultBorder);
+        ResetFieldBorder(YearMaxUpDown, defaultBorder);
+        ResetFieldBorder(ValueUpDown, defaultBorder);
+        ResetFieldBorder(PopulationUpDown, defaultBorder);
     }
 
-    private static void SetFieldHighlight(TextBlock label, WpfTextBox box, bool missing, Brush badBrush, Brush defaultBorder)
+    private static void SetFieldHighlight(TextBlock label, WpfControl box, bool missing, Brush badBrush, Brush defaultBorder)
     {
         if (missing)
         {
@@ -1051,12 +1459,12 @@ public partial class MainWindow : Window
         }
         else
         {
-            label.Foreground = (Brush)(WpfApplication.Current?.TryFindResource("TextPrimary") ?? System.Windows.Media.Brushes.White);
+            label.Foreground = (Brush)(WpfApplication.Current?.TryFindResource("FormLabelBrush") ?? System.Windows.Media.Brushes.Gray);
             ResetFieldBorder(box, defaultBorder);
         }
     }
 
-    private static void ResetFieldBorder(WpfTextBox box, Brush defaultBorder)
+    private static void ResetFieldBorder(WpfControl box, Brush defaultBorder)
     {
         box.BorderBrush = defaultBorder;
         box.BorderThickness = new Thickness(1);
@@ -1071,259 +1479,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void AuditParts_Click(object sender, RoutedEventArgs e)
+    private VehiclesMirrorResult WriteConfig(VehicleConfigItem item, string json)
     {
-        if (_selected == null)
-        {
-            System.Windows.MessageBox.Show("Select a config to audit first.", "Parts Audit",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        var selected = _selected;
-        PartsAuditTextBox.Text = "Auditing parts... please wait.";
-        try
-        {
-            var result = await Task.Run(() => BuildPartsAudit(selected));
-            PartsAuditTextBox.Text = result;
-        }
-        catch (Exception ex)
-        {
-            PartsAuditTextBox.Text = $"Audit failed: {ex.Message}";
-        }
-    }
-
-    private string BuildPartsAudit(VehicleConfigItem item)
-    {
-        var pcPath = GetPcPath(item);
-        if (string.IsNullOrWhiteSpace(pcPath))
-        {
-            return "No pcFilename found and default pc path could not be built.";
-        }
-
-        var pcText = ReadSourceText(item, pcPath);
-        var pcRoot = ParseJson(pcText) as JsonObject;
-        if (pcRoot == null)
-        {
-            return "Failed to parse pc file.";
-        }
-
-        if (pcRoot["parts"] is not JsonObject partsObj)
-        {
-            return "pc file has no parts list.";
-        }
-
-        var partNames = new List<string>();
-        foreach (var kvp in partsObj)
-        {
-            if (kvp.Value is JsonValue val && val.TryGetValue<string>(out var partName) && !string.IsNullOrWhiteSpace(partName))
-            {
-                partNames.Add(partName);
-            }
-        }
-
-        if (partNames.Count == 0)
-        {
-            return "pc file has no named parts.";
-        }
-
-        var partValueIndex = BuildPartValueIndex(item);
-        var missingParts = new List<string>();
-        var withValues = new List<(string name, double value)>();
-
-        foreach (var partName in partNames.Distinct())
-        {
-            if (partValueIndex.TryGetValue(partName, out var value))
-            {
-                withValues.Add((partName, value));
-            }
-            else
-            {
-                missingParts.Add(partName);
-            }
-        }
-
-        var totalValue = withValues.Sum(x => x.value);
-        var topParts = withValues
-            .OrderByDescending(x => x.value)
-            .Take(5)
-            .ToList();
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"Parts listed: {partNames.Count}");
-        sb.AppendLine($"Parts with value: {withValues.Count}");
-        sb.AppendLine($"Parts missing value: {missingParts.Count}");
-        sb.AppendLine($"Total parts value: {totalValue:0}");
-        if (item.Value.HasValue)
-        {
-            sb.AppendLine($"Config Value: {item.Value.Value:0}");
-        }
-
-        if (topParts.Count > 0)
-        {
-            sb.AppendLine("Top parts:");
-            foreach (var part in topParts)
-            {
-                sb.AppendLine($"- {part.name}: {part.value:0}");
-            }
-        }
-
-        if (missingParts.Count > 0)
-        {
-            sb.AppendLine("Missing part values (sample):");
-            foreach (var part in missingParts.Take(10))
-            {
-                sb.AppendLine($"- {part}");
-            }
-        }
-
-        return sb.ToString().TrimEnd();
-    }
-
-    private static string? GetPcPath(VehicleConfigItem item)
-    {
-        if (item.Json is JsonObject root)
-        {
-            var pcFile = ReadString(root, "pcFilename");
-            if (!string.IsNullOrWhiteSpace(pcFile))
-            {
-                return TrimLeadingSlash(pcFile);
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(item.ModelKey) || string.IsNullOrWhiteSpace(item.ConfigKey))
-        {
-            return null;
-        }
-
-        return $"vehicles/{item.ModelKey}/{item.ConfigKey}.pc";
-    }
-
-    private static string TrimLeadingSlash(string path)
-    {
-        return path.StartsWith("/", StringComparison.Ordinal) ? path.Substring(1) : path;
-    }
-
-    private string ReadSourceText(VehicleConfigItem item, string relativePath)
-    {
-        if (item.IsZip)
-        {
-            using var archive = ZipFile.OpenRead(item.SourcePath);
-            var entry = archive.GetEntry(relativePath.Replace('\\', '/'));
-            if (entry == null)
-            {
-                throw new FileNotFoundException("Entry not found in zip.", relativePath);
-            }
-
-            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
-            return reader.ReadToEnd();
-        }
-
-        var fullPath = Path.Combine(item.SourcePath, relativePath.Replace('/', Path.DirectorySeparatorChar));
-        return File.ReadAllText(fullPath);
-    }
-
-    private Dictionary<string, double> BuildPartValueIndex(VehicleConfigItem item)
-    {
-        var cacheKey = $"{item.SourcePath}|{item.ModelKey}|{item.IsZip}";
-        lock (_partValueCacheLock)
-        {
-            if (_partValueCache.TryGetValue(cacheKey, out var cached))
-            {
-                return new Dictionary<string, double>(cached, StringComparer.OrdinalIgnoreCase);
-            }
-        }
-
-        var index = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        var modelPath = $"vehicles/{item.ModelKey}/";
-
-        if (item.IsZip)
-        {
-            using var archive = ZipFile.OpenRead(item.SourcePath);
-            foreach (var entry in archive.Entries)
-            {
-                if (!entry.FullName.StartsWith(modelPath, StringComparison.OrdinalIgnoreCase) ||
-                    !entry.FullName.EndsWith(".jbeam", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
-                    var text = reader.ReadToEnd();
-                    AddPartValuesFromJbeam(text, index);
-                }
-                catch
-                {
-                    // Ignore malformed jbeam entries during audit.
-                }
-            }
-        }
-        else
-        {
-            var modelDir = Path.Combine(item.SourcePath, "vehicles", item.ModelKey);
-            if (!Directory.Exists(modelDir))
-            {
-                return index;
-            }
-
-            foreach (var file in Directory.EnumerateFiles(modelDir, "*.jbeam", SearchOption.AllDirectories))
-            {
-                try
-                {
-                    var text = File.ReadAllText(file);
-                    AddPartValuesFromJbeam(text, index);
-                }
-                catch
-                {
-                    // Ignore malformed jbeam files during audit.
-                }
-            }
-        }
-
-        lock (_partValueCacheLock)
-        {
-            _partValueCache[cacheKey] = new Dictionary<string, double>(index, StringComparer.OrdinalIgnoreCase);
-        }
-
-        return index;
-    }
-
-    private static void AddPartValuesFromJbeam(string text, Dictionary<string, double> index)
-    {
-        var root = ParseJson(text) as JsonObject;
-        if (root == null)
-        {
-            return;
-        }
-
-        foreach (var kvp in root)
-        {
-            if (kvp.Value is not JsonObject partObj)
-            {
-                continue;
-            }
-
-            var info = partObj["information"] as JsonObject;
-            if (info == null)
-            {
-                continue;
-            }
-
-            if (info["value"] is JsonValue val && val.TryGetValue<double>(out var value))
-            {
-                if (!index.ContainsKey(kvp.Key))
-                {
-                    index[kvp.Key] = value;
-                }
-            }
-        }
-    }
-
-    private void WriteConfig(VehicleConfigItem item, string json)
-    {
-        if (BackupCheckBox.IsChecked == true)
+        if (BackupToggleSwitch.IsOn)
         {
             var backupTarget = item.IsZip ? item.SourcePath : item.InfoPath;
             var backupPath = backupTarget + ".bak";
@@ -1340,6 +1498,342 @@ public partial class MainWindow : Window
         else
         {
             File.WriteAllText(item.InfoPath, json, new UTF8Encoding(false));
+        }
+
+        if (VehiclesToggleSwitch?.IsOn != true)
+        {
+            return VehiclesMirrorResult.NotRequested();
+        }
+
+        return MirrorConfigBundleToVehicles(item, json, ModsPathTextBox.Text.Trim());
+    }
+
+    private VehiclesMirrorResult MirrorConfigBundleToVehicles(VehicleConfigItem item, string updatedInfoJson, string modsPath)
+    {
+        var result = VehiclesMirrorResult.Requested();
+        var vehiclesRoot = ResolveVehiclesRoot(modsPath, out var resolveWarning);
+        if (vehiclesRoot == null)
+        {
+            result.Warnings.Add(resolveWarning);
+            return result;
+        }
+
+        try
+        {
+            var destinationModelDir = Path.Combine(vehiclesRoot, item.ModelKey);
+            Directory.CreateDirectory(destinationModelDir);
+
+            var infoFileName = Path.GetFileName(item.InfoPath.Replace('/', '\\'));
+            var destinationInfoPath = Path.Combine(destinationModelDir, infoFileName);
+            File.WriteAllText(destinationInfoPath, updatedInfoJson, new UTF8Encoding(false));
+            result.InfoCopied = true;
+
+            if (item.IsZip)
+            {
+                CopyMirrorAssetsFromZip(item, destinationModelDir, result);
+            }
+            else
+            {
+                CopyMirrorAssetsFromFolder(item, destinationModelDir, result);
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            result.HardError = $"Saved the mod config, but copying to vehicles failed due to access permissions: {ex.Message}";
+        }
+        catch (IOException ex)
+        {
+            result.HardError = $"Saved the mod config, but copying to vehicles failed due to an I/O error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            result.HardError = $"Saved the mod config, but vehicles mirror failed unexpectedly: {ex.Message}";
+        }
+
+        return result;
+    }
+
+    private static string? ResolveVehiclesRoot(string modsPath, out string warning)
+    {
+        warning = string.Empty;
+        if (string.IsNullOrWhiteSpace(modsPath))
+        {
+            warning = "Vehicles mirror skipped because mods path is empty.";
+            return null;
+        }
+
+        string fullModsPath;
+        try
+        {
+            fullModsPath = Path.GetFullPath(modsPath);
+        }
+        catch (Exception)
+        {
+            warning = $"Vehicles mirror skipped because mods path '{modsPath}' is invalid.";
+            return null;
+        }
+
+        var modsParent = Directory.GetParent(fullModsPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))?.FullName;
+        if (string.IsNullOrWhiteSpace(modsParent))
+        {
+            warning = "Vehicles mirror skipped because the mods folder parent path could not be resolved.";
+            return null;
+        }
+
+        var vehiclesRoot = Path.Combine(modsParent, "vehicles");
+        if (!Directory.Exists(vehiclesRoot))
+        {
+            warning = $"Vehicles mirror skipped because '{vehiclesRoot}' was not found.";
+            return null;
+        }
+
+        return vehiclesRoot;
+    }
+
+    private static void CopyMirrorAssetsFromFolder(VehicleConfigItem item, string destinationModelDir, VehiclesMirrorResult result)
+    {
+        var sourceModelDir = ResolveSourceModelDirectory(item);
+        if (sourceModelDir == null || !Directory.Exists(sourceModelDir))
+        {
+            result.Warnings.Add("Source model folder was not found for asset copy.");
+            return;
+        }
+
+        foreach (var sourceFilePath in Directory.EnumerateFiles(sourceModelDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(sourceFilePath);
+            if (!TryClassifyMirrorAsset(fileName, item.ConfigKey, out var assetKind))
+            {
+                continue;
+            }
+
+            var destinationFilePath = Path.Combine(destinationModelDir, fileName);
+            File.Copy(sourceFilePath, destinationFilePath, overwrite: true);
+            result.RegisterCopiedAsset(assetKind);
+        }
+    }
+
+    private static void CopyMirrorAssetsFromZip(VehicleConfigItem item, string destinationModelDir, VehiclesMirrorResult result)
+    {
+        using var archive = ZipFile.OpenRead(item.SourcePath);
+        var modelPrefix = ResolveModelPrefixFromZipInfoPath(item.InfoPath);
+        if (string.IsNullOrWhiteSpace(modelPrefix))
+        {
+            result.Warnings.Add("Source zip model path could not be resolved for asset copy.");
+            return;
+        }
+
+        foreach (var entry in archive.Entries)
+        {
+            if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!entry.FullName.StartsWith(modelPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var relative = entry.FullName.Substring(modelPrefix.Length);
+            if (relative.Contains('/'))
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(relative);
+            if (!TryClassifyMirrorAsset(fileName, item.ConfigKey, out var assetKind))
+            {
+                continue;
+            }
+
+            var destinationFilePath = Path.Combine(destinationModelDir, fileName);
+            using var sourceStream = entry.Open();
+            using var targetStream = new FileStream(destinationFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            sourceStream.CopyTo(targetStream);
+            result.RegisterCopiedAsset(assetKind);
+        }
+    }
+
+    private static string? ResolveSourceModelDirectory(VehicleConfigItem item)
+    {
+        var sourcePath = item.InfoPath.Replace('/', '\\');
+        var marker = $"\\vehicles\\{item.ModelKey}\\";
+        var markerIndex = sourcePath.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex >= 0)
+        {
+            var modelDirPath = sourcePath.Substring(0, markerIndex + marker.Length - 1);
+            if (Directory.Exists(modelDirPath))
+            {
+                return modelDirPath;
+            }
+        }
+
+        var fallback = Path.Combine(item.SourcePath, "vehicles", item.ModelKey);
+        return Directory.Exists(fallback) ? fallback : null;
+    }
+
+    private static string? ResolveModelPrefixFromZipInfoPath(string infoPath)
+    {
+        var normalized = infoPath.Replace('\\', '/');
+        var markerIndex = normalized.IndexOf("vehicles/", StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+        {
+            return null;
+        }
+
+        var afterVehicles = normalized.Substring(markerIndex + "vehicles/".Length);
+        var slashIndex = afterVehicles.IndexOf('/');
+        if (slashIndex <= 0)
+        {
+            return null;
+        }
+
+        var modelSegment = afterVehicles.Substring(0, slashIndex);
+        return normalized.Substring(0, markerIndex) + "vehicles/" + modelSegment + "/";
+    }
+
+    private static bool TryClassifyMirrorAsset(string fileName, string configKey, out MirrorAssetKind assetKind)
+    {
+        assetKind = MirrorAssetKind.None;
+        var extension = Path.GetExtension(fileName);
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        if (string.IsNullOrWhiteSpace(extension) || string.IsNullOrWhiteSpace(baseName))
+        {
+            return false;
+        }
+
+        if (extension.Equals(".pc", StringComparison.OrdinalIgnoreCase) &&
+            baseName.Equals(configKey, StringComparison.OrdinalIgnoreCase))
+        {
+            assetKind = MirrorAssetKind.ConfigPc;
+            return true;
+        }
+
+        if (!IsSupportedPreviewImageExtension(extension))
+        {
+            return false;
+        }
+
+        if (baseName.Equals(configKey, StringComparison.OrdinalIgnoreCase))
+        {
+            assetKind = MirrorAssetKind.ConfigImage;
+            return true;
+        }
+
+        if (baseName.Equals("default", StringComparison.OrdinalIgnoreCase))
+        {
+            assetKind = MirrorAssetKind.DefaultImage;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsSupportedPreviewImageExtension(string extension)
+    {
+        return extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".webp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private enum MirrorAssetKind
+    {
+        None,
+        ConfigPc,
+        ConfigImage,
+        DefaultImage
+    }
+
+    private sealed class VehiclesMirrorResult
+    {
+        public bool IsRequested { get; private init; }
+        public bool InfoCopied { get; set; }
+        public bool ConfigPcCopied { get; private set; }
+        public int ConfigImageCount { get; private set; }
+        public int DefaultImageCount { get; private set; }
+        public List<string> Warnings { get; } = new();
+        public string? HardError { get; set; }
+
+        public static VehiclesMirrorResult NotRequested() => new() { IsRequested = false };
+
+        public static VehiclesMirrorResult Requested() => new() { IsRequested = true };
+
+        public void RegisterCopiedAsset(MirrorAssetKind assetKind)
+        {
+            switch (assetKind)
+            {
+                case MirrorAssetKind.ConfigPc:
+                    ConfigPcCopied = true;
+                    break;
+                case MirrorAssetKind.ConfigImage:
+                    ConfigImageCount++;
+                    break;
+                case MirrorAssetKind.DefaultImage:
+                    DefaultImageCount++;
+                    break;
+            }
+        }
+
+        public string BuildStatusSuffix(string modelKey)
+        {
+            if (!IsRequested)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(HardError))
+            {
+                return $" Vehicles mirror failed for {modelKey}.";
+            }
+
+            if (!InfoCopied)
+            {
+                return Warnings.Count == 0
+                    ? " Vehicles mirror skipped."
+                    : $" {string.Join(" ", Warnings)}";
+            }
+
+            var copiedParts = new List<string> { "info" };
+            if (ConfigPcCopied)
+            {
+                copiedParts.Add("pc");
+            }
+            if (ConfigImageCount > 0)
+            {
+                copiedParts.Add($"{ConfigImageCount} config image(s)");
+            }
+            if (DefaultImageCount > 0)
+            {
+                copiedParts.Add($"{DefaultImageCount} default image(s)");
+            }
+
+            var missingParts = new List<string>();
+            if (!ConfigPcCopied)
+            {
+                missingParts.Add("pc");
+            }
+            if (ConfigImageCount == 0)
+            {
+                missingParts.Add("config image");
+            }
+            if (DefaultImageCount == 0)
+            {
+                missingParts.Add("default image");
+            }
+
+            var suffix = $" Vehicles mirror to vehicles/{modelKey}: {string.Join(", ", copiedParts)}";
+            if (missingParts.Count > 0)
+            {
+                suffix += $"; missing {string.Join(", ", missingParts)}";
+            }
+            if (Warnings.Count > 0)
+            {
+                suffix += $"; {string.Join(" ", Warnings)}";
+            }
+
+            return suffix + ".";
         }
     }
 
@@ -1512,3 +2006,4 @@ public partial class MainWindow : Window
         return null;
     }
 }
+

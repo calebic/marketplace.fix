@@ -1,6 +1,7 @@
-<Window x:Class="WpfApp1.MainWindow"
+﻿<mah:MetroWindow x:Class="WpfApp1.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -8,172 +9,190 @@
         mc:Ignorable="d"
         Title="BeamNG Mod Marketplace Config Editor" Height="740" Width="1260"
         WindowStartupLocation="CenterScreen"
-        Background="#0C0E12"
+        Background="{DynamicResource AppBackgroundBrush}"
         FontFamily="Bahnschrift"
         WindowStyle="None"
-        ResizeMode="CanResize">
+        ResizeMode="CanResize"
+        UseNoneWindowStyle="True"
+        ShowTitleBar="False"
+        ShowMinButton="False"
+        ShowMaxRestoreButton="False"
+        ShowCloseButton="False"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0"/>
+        <shell:WindowChrome CaptionHeight="38" ResizeBorderThickness="6" GlassFrameThickness="0"/>
     </shell:WindowChrome.WindowChrome>
-    <Window.Resources>
-        <SolidColorBrush x:Key="CardBg" Color="#141821"/>
-        <SolidColorBrush x:Key="CardBorder" Color="#242A36"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#E6E6E6"/>
-        <SolidColorBrush x:Key="Accent" Color="#64C4FF"/>
-        <SolidColorBrush x:Key="Danger" Color="#FFB454"/>
-        <SolidColorBrush x:Key="BadText" Color="#FF6B6B"/>
-        <SolidColorBrush x:Key="GoodText" Color="#73E083"/>
-
-        <Style TargetType="{x:Type TextBlock}">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-        </Style>
-        <Style TargetType="{x:Type TextBox}">
-            <Setter Property="Background" Value="#0F1218"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="Margin" Value="10,4"/>
-        </Style>
-        <Style TargetType="{x:Type Button}">
-            <Setter Property="Background" Value="#1C2330"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="Margin" Value="0"/>
-        </Style>
-        <Style TargetType="{x:Type CheckBox}">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-        </Style>
-        <Style TargetType="{x:Type DataGridColumnHeader}">
-            <Setter Property="Background" Value="#1A212C"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
-            <Setter Property="BorderThickness" Value="0,0,0,1"/>
-            <Setter Property="Padding" Value="6,4"/>
-        </Style>
-        <Style TargetType="{x:Type ComboBox}">
-            <Setter Property="Background" Value="#0F1218"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource CardBorder}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="6,4"/>
-            <Style.Resources>
-                <ResourceDictionary>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#0F1218"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFFFF"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#1B2330"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
-                </ResourceDictionary>
-            </Style.Resources>
-        </Style>
-        <Style TargetType="{x:Type ComboBoxItem}">
-            <Setter Property="Background" Value="#0F1218"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Setter Property="Padding" Value="6,4"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
-                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}">
-                            <ContentPresenter />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#1B2330"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#212B3A"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="{x:Type Thumb}">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Thumb}">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="6"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="{x:Type ScrollBar}">
-            <Setter Property="Background" Value="#0F1218"/>
-            <Setter Property="Foreground" Value="#3B4556"/>
-            <Setter Property="Width" Value="10"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ScrollBar}">
-                        <Grid Background="{TemplateBinding Background}">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.LineUpCommand" Background="Transparent" Height="0"/>
-                                </Track.DecreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Background="{TemplateBinding Foreground}"/>
-                                </Track.Thumb>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.LineDownCommand" Background="Transparent" Height="0"/>
-                                </Track.IncreaseRepeatButton>
-                            </Track>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="{x:Type DataGridCell}">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding HasMissing}" Value="True">
-                    <Setter Property="Foreground" Value="{StaticResource BadText}"/>
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-        <Style TargetType="{x:Type DataGridRow}">
-            <Setter Property="Background" Value="Transparent"/>
-            <Style.Triggers>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#1E2A3A"/>
-                    <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-                </Trigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#1B2330"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-    </Window.Resources>
-
     <Grid x:Name="RootGrid" Margin="14">
         <Grid.RowDefinitions>
-            <RowDefinition Height="36"/>
+            <RowDefinition Height="38"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="#0F1218" BorderBrush="{StaticResource CardBorder}" BorderThickness="0,0,0,1">
-            <Grid x:Name="TitleBar" Height="36" VerticalAlignment="Top" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Border Grid.Row="0"
+        Background="{DynamicResource TitleBarBackgroundBrush}"
+        BorderBrush="{DynamicResource BorderBrush}"
+        BorderThickness="0,0,0,1"
+        Margin="0,0,0,65"
+        Grid.RowSpan="2">
+            <Grid x:Name="TitleBar"
+          Height="43"
+          VerticalAlignment="Center"
+          MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="BeamNG Mod Marketplace Config Editor | Discord: @ic.ey" VerticalAlignment="Center" Margin="12,0,0,0"
-                           Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold"/>
-                <Button Grid.Column="2" Content="—" Width="44" Height="28" Margin="0,4,0,4"
-                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                        Click="Minimize_Click"/>
-                <Button Grid.Column="3" Content="✕" Width="44" Height="28" Margin="4,4,8,4"
-                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                        Background="#2A2F3A" Click="Close_Click"/>
+
+                <TextBlock Grid.Column="0"
+                   Text="BeamNG Mod Marketplace Config Editor | Discord: @ic.ey"
+                   VerticalAlignment="Center"
+                   Margin="12,0,0,0"
+                   Foreground="{DynamicResource AppForegroundBrush}"
+                   FontWeight="SemiBold"/>
+
+                <Button x:Name="AutoFillSettingsButton"
+                Grid.Column="1"
+                Content="&#xE713;"
+                Margin="0,0,4,0"
+                Style="{StaticResource ToolbarIconButtonStyle}"
+                VerticalAlignment="Center"
+                FontFamily="Segoe MDL2 Assets"
+                FontSize="14"
+                Click="AutoFillSettingsButton_Click"
+                shell:WindowChrome.IsHitTestVisibleInChrome="True" Height="28"/>
+
+                <Button x:Name="HelpButton"
+                Grid.Column="2"
+                Content="?"
+                Margin="0,0,4,0"
+                Style="{StaticResource ToolbarIconButtonStyle}"
+                VerticalAlignment="Center"
+                FontSize="14"
+                FontWeight="Bold"
+                Click="HelpButton_Click"
+                shell:WindowChrome.IsHitTestVisibleInChrome="True" Height="28"/>
+
+                <Popup x:Name="HelpPopup"
+                       Grid.Column="2"
+                       Placement="Bottom"
+                       PlacementTarget="{Binding ElementName=HelpButton}"
+                       StaysOpen="False"
+                       AllowsTransparency="True">
+                    <Border Background="{DynamicResource PopupBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="12"
+                            Width="360"
+                            Height="560">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Text="Help and Documentation"
+                                       FontWeight="SemiBold"/>
+
+                            <ScrollViewer Grid.Row="1"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Margin="0,10,0,0">
+                                <StackPanel Margin="0,0,4,0">
+                                    <TextBlock Text="Overview"
+                                               Style="{StaticResource SectionTitleTextBlockStyle}"
+                                               FontSize="14"/>
+                                    <TextBlock TextWrapping="Wrap"
+                                               Margin="0,4,0,10"
+                                               Foreground="{DynamicResource MutedForegroundBrush}"
+                                               Text="This tool scans vehicle info JSON files in your BeamNG mods folder, highlights missing marketplace fields, and lets you save corrected values so vehicles show up in Career Marketplace."/>
+
+                                    <TextBlock Text="Quick Start"
+                                               Style="{StaticResource SectionTitleTextBlockStyle}"
+                                               FontSize="14"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="1. Select your Mods folder and click Scan."/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="2. Pick a config from the list and fill missing fields on the right."/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="3. Choose Insurance Class and verify Year, Value, and Population."/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="4. Click Save. Enable Input into 'Vehicles' if marketplace visibility still fails."/>
+
+                                    <TextBlock Text="Option Reference"
+                                               Style="{StaticResource SectionTitleTextBlockStyle}"
+                                               FontSize="14"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
+                                        <Run FontWeight="SemiBold" Text="Missing only"/>
+                                        <Run Text=" - Shows only configs that still have missing fields."/>
+                                    </TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
+                                        <Run FontWeight="SemiBold" Text="Group by mod"/>
+                                        <Run Text=" - Groups rows by mod package name."/>
+                                    </TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
+                                        <Run FontWeight="SemiBold" Text="Missing first"/>
+                                        <Run Text=" - Sorts configs with missing values to the top."/>
+                                    </TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
+                                        <Run FontWeight="SemiBold" Text="Dark mode"/>
+                                        <Run Text=" - Switches between light and dark UI theme."/>
+                                    </TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
+                                        <Run FontWeight="SemiBold" Text="Backup before save"/>
+                                        <Run Text=" - Creates a .bak copy before the first write."/>
+                                    </TextBlock>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}">
+                                        <Run FontWeight="SemiBold" Text="Input into 'Vehicles'"/>
+                                        <Run Text=" - Mirrors saved info, matching .pc, and preview images into the vehicles folder sibling to your mods folder."/>
+                                    </TextBlock>
+
+                                    <TextBlock Text="Field Guide"
+                                               Style="{StaticResource SectionTitleTextBlockStyle}"
+                                               FontSize="14"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Insurance Class values: dailyDriver, commercial, prestige."/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Region is force-set to northAmerica when saving."/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="Population presets are shortcuts only; Custom means your numeric value is used."/>
+
+                                    <TextBlock Text="Keybinds"
+                                               Style="{StaticResource SectionTitleTextBlockStyle}"
+                                               FontSize="14"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+F - Focus search"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+S - Save selected config"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+R - Reload selected config"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+A - Auto-fill missing fields"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Up/Down - Move config selection"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="Esc - Close open popup"/>
+
+                                    <TextBlock Text="Troubleshooting"
+                                               Style="{StaticResource SectionTitleTextBlockStyle}"
+                                               FontSize="14"/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Vehicle still not in marketplace: save again with Input into 'Vehicles' enabled."/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Mirror warning about vehicles path: verify mods and vehicles are sibling folders under the same BeamNG root."/>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="If fields stay marked missing, check for empty values and invalid year range."/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+                </Popup>
+
+                <Button Grid.Column="3"
+                Content="&#x2014;"
+                Margin="0,4,0,4"
+                Style="{StaticResource TitleBarButtonStyle}"
+                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                Click="Minimize_Click"/>
+
+                <Button Grid.Column="4"
+                Content="&#x2715;"
+                Margin="4,4,8,4"
+                Style="{StaticResource TitleBarDangerButtonStyle}"
+                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                Click="Close_Click"/>
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Padding="14" Background="{StaticResource CardBg}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="8" Margin="0,10,0,0">
+        <Border Grid.Row="1" Padding="14" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Margin="0,10,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -183,11 +202,11 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Mods folder" VerticalAlignment="Center"/>
-                <TextBox x:Name="ModsPathTextBox" Grid.Column="1" Margin="10,0,0,0" MinWidth="420"/>
-                <Button x:Name="BrowseButton" Grid.Column="2" Content="Browse" Margin="10,0,0,0" Click="BrowseMods_Click"/>
-                <Button x:Name="ScanButton" Grid.Column="3" Content="Scan" Margin="10,0,0,0" Click="ScanMods_Click"/>
-                <CheckBox x:Name="BackupCheckBox" Grid.Column="4" Margin="18,0,0,0"
-                          Content="Backup before save" VerticalAlignment="Center" IsChecked="True"/>
+                <TextBox x:Name="ModsPathTextBox" Grid.Column="1" Margin="12,0,12,0" MinWidth="380"
+                         mah:TextBoxHelper.ClearTextButton="True"/>
+                <Button x:Name="BrowseButton" Grid.Column="2" Content="Browse" Width="108" Margin="0,0,10,0" Click="BrowseMods_Click"/>
+                <Button x:Name="ScanButton" Grid.Column="3" Content="Scan" Width="72" Margin="0,0,14,0" Click="ScanMods_Click"/>
+                <StackPanel Grid.Column="4" Margin="0" Orientation="Horizontal" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -197,14 +216,14 @@
                 <ColumnDefinition Width="3*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Padding="10" Background="{StaticResource CardBg}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="8">
+            <Border Grid.Column="0" Padding="10" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Configs" FontSize="16" FontWeight="SemiBold" Margin="2,0,0,10"/>
+                    <TextBlock Text="Configs" FontSize="16" Style="{StaticResource SectionTitleTextBlockStyle}" Margin="2,0,0,10"/>
                     <Grid Grid.Row="1" Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -214,6 +233,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="SearchTextBox" Grid.Column="0" Margin="0" Height="30"
                                  VerticalContentAlignment="Center" TextChanged="SearchTextBox_TextChanged"
+                                 mah:TextBoxHelper.ClearTextButton="True"
                                  ToolTip="Search mod, model, config, or name"/>
                         <CheckBox x:Name="MissingOnlyCheckBox" Grid.Column="1" Margin="10,0,0,0"
                                   VerticalAlignment="Center" Content="Missing only"
@@ -226,31 +246,144 @@
                                   Checked="SortControl_Changed" Unchecked="SortControl_Changed"/>
                     </Grid>
                     <Grid Grid.Row="2">
-                        <TextBlock x:Name="EmptyStateTextBlock" Text="No configs match your filters."
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="{StaticResource TextMuted}" Visibility="Collapsed"/>
+                        <Border x:Name="EmptyStateContainer"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,8"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                            <TextBlock x:Name="EmptyStateTextBlock" Text="No configs match your filters."
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       TextAlignment="Center"/>
+                        </Border>
                         <DataGrid x:Name="ConfigsGrid"
-                              ItemsSource="{Binding Configs}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              SelectionMode="Single"
-                              SelectionChanged="ConfigsGrid_SelectionChanged"
-                              HeadersVisibility="Column"
-                              ColumnWidth="*"
-                              VirtualizingPanel.IsVirtualizing="True"
-                              VirtualizingPanel.VirtualizationMode="Recycling"
-                              VirtualizingPanel.IsVirtualizingWhenGrouping="True"
-                              ScrollViewer.CanContentScroll="True"
-                              EnableRowVirtualization="True"
-                              EnableColumnVirtualization="False"
-                              GridLinesVisibility="None"
-                              RowBackground="#101318"
-                              AlternatingRowBackground="#141922"
-                              Foreground="{StaticResource TextPrimary}"
-                              Background="#0F1218"
-                              BorderBrush="#1F2630"
-                              BorderThickness="1"
-                              RowHeight="26">
+          ItemsSource="{Binding Configs}"
+          AutoGenerateColumns="False"
+          IsReadOnly="True"
+          SelectionMode="Single"
+          SelectionUnit="FullRow"
+          FocusVisualStyle="{x:Null}"
+          SelectionChanged="ConfigsGrid_SelectionChanged"
+          HeadersVisibility="Column"
+          ColumnWidth="*"
+          VirtualizingPanel.IsVirtualizing="True"
+          VirtualizingPanel.VirtualizationMode="Recycling"
+          VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+          ScrollViewer.CanContentScroll="True"
+          EnableRowVirtualization="True"
+          EnableColumnVirtualization="False"
+          GridLinesVisibility="None"
+          Foreground="{DynamicResource AppForegroundBrush}"
+          Background="{DynamicResource CardBackgroundBrush}"
+          BorderBrush="{DynamicResource BorderBrush}"
+          BorderThickness="1"
+          RowHeight="32">
+
+                            <DataGrid.Resources>
+                                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent"/>
+                                <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="Transparent"/>
+                                <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="Transparent"/>
+                            </DataGrid.Resources>
+
+                            <DataGrid.ColumnHeaderStyle>
+                                <Style TargetType="DataGridColumnHeader">
+                                    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+                                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="Padding" Value="10,6"/>
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="Height" Value="30"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                </Style>
+                            </DataGrid.ColumnHeaderStyle>
+
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Margin" Value="0,0,0,2"/>
+                                    <Setter Property="SnapsToDevicePixels" Value="True"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="DataGridRow">
+                                                <Border x:Name="RowBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="0"
+                                CornerRadius="6"
+                                Padding="0">
+                                                    <SelectiveScrollingGrid>
+                                                        <SelectiveScrollingGrid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </SelectiveScrollingGrid.ColumnDefinitions>
+                                                        <SelectiveScrollingGrid.RowDefinitions>
+                                                            <RowDefinition Height="*"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </SelectiveScrollingGrid.RowDefinitions>
+
+                                                        <DataGridCellsPresenter Grid.Column="1"/>
+                                                        <DataGridDetailsPresenter Grid.Column="1"
+                                                          Grid.Row="1"
+                                                          Visibility="{TemplateBinding DetailsVisibility}"/>
+                                                    </SelectiveScrollingGrid>
+                                                </Border>
+
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="RowBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                    </Trigger>
+
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="RowBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                        <Setter TargetName="RowBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                        <Setter TargetName="RowBorder" Property="BorderThickness" Value="1"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
+                                                    </Trigger>
+
+                                                    <MultiTrigger>
+                                                        <MultiTrigger.Conditions>
+                                                            <Condition Property="IsSelected" Value="True"/>
+                                                            <Condition Property="Selector.IsSelectionActive" Value="False"/>
+                                                        </MultiTrigger.Conditions>
+                                                        <Setter TargetName="RowBorder" Property="Background" Value="{DynamicResource SelectionBrush}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
+                                                    </MultiTrigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </DataGrid.RowStyle>
+
+                            <DataGrid.CellStyle>
+                                <Style TargetType="DataGridCell">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Padding" Value="10,4"/>
+                                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+
+                                    <Style.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
+                                            <Setter Property="BorderBrush" Value="Transparent"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.CellStyle>
+
                             <DataGrid.GroupStyle>
                                 <GroupStyle>
                                     <GroupStyle.ContainerStyle>
@@ -259,16 +392,94 @@
                                             <Setter Property="Template">
                                                 <Setter.Value>
                                                     <ControlTemplate TargetType="{x:Type GroupItem}">
-                                                        <Border Background="#18202B" BorderBrush="#283241" BorderThickness="1" CornerRadius="6" Padding="2">
-                                                            <Expander IsExpanded="False" Background="#18202B" Padding="6">
+                                                        <Border Background="Transparent"
+                                        BorderBrush="Transparent"
+                                        BorderThickness="0"
+                                        Padding="0">
+                                                            <Expander IsExpanded="False"
+                                              Background="Transparent"
+                                              BorderBrush="Transparent"
+                                              BorderThickness="0"
+                                              Padding="0">
+                                                                <Expander.Template>
+                                                                    <ControlTemplate TargetType="{x:Type Expander}">
+                                                                        <StackPanel>
+                                                                            <ToggleButton x:Name="GroupHeaderToggle"
+                                                                  IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                                                  Background="Transparent"
+                                                                  BorderBrush="Transparent"
+                                                                  BorderThickness="0"
+                                                                  Padding="0"
+                                                                  Margin="0,0,0,4"
+                                                                  HorizontalAlignment="Stretch"
+                                                                  HorizontalContentAlignment="Stretch"
+                                                                  FocusVisualStyle="{x:Null}">
+                                                                                <ToggleButton.Template>
+                                                                                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                                                                        <Border x:Name="GroupHeaderBackground"
+                                                                        Background="{DynamicResource SurfaceBrush}"
+                                                                        BorderBrush="{DynamicResource BorderBrush}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="8"
+                                                                        Height="30"
+                                                                        Padding="10,0"
+                                                                        SnapsToDevicePixels="True">
+                                                                                            <ContentPresenter HorizontalAlignment="Stretch"
+                                                                                      VerticalAlignment="Center"/>
+                                                                                        </Border>
+                                                                                        <ControlTemplate.Triggers>
+                                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                                <Setter TargetName="GroupHeaderBackground"
+                                                                                Property="Background"
+                                                                                Value="{DynamicResource HoverBrush}"/>
+                                                                                            </Trigger>
+                                                                                            <Trigger Property="IsChecked" Value="True">
+                                                                                                <Setter TargetName="GroupHeaderBackground"
+                                                                                Property="Background"
+                                                                                Value="{DynamicResource SelectionBrush}"/>
+                                                                                                <Setter TargetName="GroupHeaderBackground"
+                                                                                Property="BorderBrush"
+                                                                                Value="{DynamicResource SelectionBrush}"/>
+                                                                                            </Trigger>
+                                                                                        </ControlTemplate.Triggers>
+                                                                                    </ControlTemplate>
+                                                                                </ToggleButton.Template>
+                                                                                <ContentPresenter ContentSource="Header"/>
+                                                                            </ToggleButton>
+
+                                                                            <ContentPresenter x:Name="ExpandSite"
+                                                                      ContentSource="Content"
+                                                                      Visibility="Collapsed"/>
+                                                                        </StackPanel>
+
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsExpanded" Value="True">
+                                                                                <Setter TargetName="ExpandSite"
+                                                                Property="Visibility"
+                                                                Value="Visible"/>
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Expander.Template>
+
                                                                 <Expander.Header>
-                                                                    <DockPanel>
-                                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
-                                                                        <TextBlock Text="{Binding ItemCount, StringFormat=  ({0} configs)}"
-                                                                           Foreground="{StaticResource TextPrimary}" Margin="8,0,0,0"/>
-                                                                    </DockPanel>
+                                                                    <Border Background="Transparent"
+                                                    BorderBrush="Transparent"
+                                                    BorderThickness="0"
+                                                    CornerRadius="8"
+                                                    Padding="0">
+                                                                        <DockPanel>
+                                                                            <TextBlock Text="{Binding Name}"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource AppForegroundBrush}"/>
+                                                                            <TextBlock Text="{Binding ItemCount, StringFormat=  ({0} configs)}"
+                                                               Foreground="{DynamicResource MutedForegroundBrush}"
+                                                               Margin="8,0,0,0"/>
+                                                                        </DockPanel>
+                                                                    </Border>
                                                                 </Expander.Header>
-                                                                <ItemsPresenter />
+
+                                                                <ItemsPresenter Margin="0,0,0,2"/>
                                                             </Expander>
                                                         </Border>
                                                     </ControlTemplate>
@@ -278,146 +489,343 @@
                                     </GroupStyle.ContainerStyle>
                                 </GroupStyle>
                             </DataGrid.GroupStyle>
+
                             <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="Name" Width="3*" MinWidth="240">
+                                <DataGridTemplateColumn Header="Name" Width="4.6*" MinWidth="240">
+                                    <DataGridTemplateColumn.HeaderStyle>
+                                        <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                                            <Setter Property="Padding" Value="46,8,10,4"/>
+                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTemplateColumn.HeaderStyle>
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <Border Background="#1A212C" Padding="6,2" CornerRadius="10" Margin="0,0,8,0">
-                                                    <TextBlock x:Name="StatusText" Text="OK" Foreground="{StaticResource GoodText}" FontSize="11"/>
+                                            <Grid VerticalAlignment="Center">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border x:Name="StatusBadge"
+        Grid.Column="0"
+        Background="#1E22C55E"
+        BorderBrush="#5522C55E"
+        BorderThickness="1"
+        CornerRadius="9"
+        Padding="8,2"
+        Margin="8,0,10,0"
+        VerticalAlignment="Center">
+                                                    <TextBlock x:Name="StatusText"
+               Text="✔"
+               Foreground="#166534"
+               FontSize="10"
+               FontWeight="SemiBold"
+               VerticalAlignment="Center"/>
                                                 </Border>
-                                                <TextBlock Text="{Binding VehicleName}" VerticalAlignment="Center"/>
-                                            </StackPanel>
+
+                                                <TextBlock Grid.Column="1"
+                           Text="{Binding VehicleName}"
+                           VerticalAlignment="Center"/>
+                                            </Grid>
+
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding HasMissing}" Value="True">
-                                                    <Setter TargetName="StatusText" Property="Text" Value="Missing"/>
-                                                    <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource BadText}"/>
+                                                    <Setter TargetName="StatusText" Property="Text" Value="✖"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="Red"/>
+                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#14FF3B30"/>
+                                                    <Setter TargetName="StatusBadge" Property="BorderBrush" Value="#30FF3B30"/>
                                                 </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="Config" Binding="{Binding ConfigKey}" Width="2*" MinWidth="160"/>
-                        </DataGrid.Columns>
+
+                                <DataGridTemplateColumn Width="2*" MinWidth="160">
+                                    <DataGridTemplateColumn.HeaderStyle>
+                                        <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+                                            <Setter Property="Padding" Value="54,6,10,6"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                        </Style>
+                                    </DataGridTemplateColumn.HeaderStyle>
+
+                                    <DataGridTemplateColumn.Header>
+                                        <TextBlock Text="Config"/>
+                                    </DataGridTemplateColumn.Header>
+
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding ConfigKey}"
+                       VerticalAlignment="Center"
+                       Margin="0,1,0,0"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
                         </DataGrid>
                     </Grid>
                 </Grid>
             </Border>
 
-            <Border Grid.Column="1" Margin="14,0,0,0" Padding="14" Background="{StaticResource CardBg}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="8">
+            <Border Grid.Column="1" Margin="14,0,0,0" Padding="14" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="Config details" FontSize="16" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="ConfigPathText" Margin="0,4,0,12" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                        <TextBlock Text="Config details" FontSize="16" Style="{StaticResource SectionTitleTextBlockStyle}"/>
+                        <TextBlock x:Name="ConfigPathText" Margin="0,4,0,6" Foreground="{DynamicResource MutedForegroundBrush}"
+                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
 
-                        <Border Background="#11161F" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,10">
+                        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,6">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="ConfigSummaryText" Foreground="{StaticResource TextPrimary}" Margin="0,0,12,0"/>
+                                <TextBlock x:Name="ConfigSummaryText" Foreground="{DynamicResource AppForegroundBrush}" FontWeight="SemiBold" Margin="0,0,12,0"/>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="Auto Fill" Height="28" Click="AutoFillMissing_Click"/>
-                                    <Button x:Name="AutoFillSettingsButton" Content="&#xE713;" Margin="8,0,0,0"
-                                            Width="32" Height="28" Padding="0" VerticalAlignment="Center"
-                                            FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                            Click="AutoFillSettingsButton_Click"/>
-                                    <Popup x:Name="AutoFillSettingsPopup" Placement="Bottom" PlacementTarget="{Binding ElementName=AutoFillSettingsButton}"
-                                           StaysOpen="False" AllowsTransparency="True">
-                                        <Border Background="#0F1218" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="8" Padding="12">
-                                            <StackPanel Width="260">
-                                                <TextBlock Text="Auto-fill settings" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoBrandCheckBox" VerticalAlignment="Center" Content="Brand"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoBrandTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoCountryCheckBox" VerticalAlignment="Center" Content="Country"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoCountryTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoTypeCheckBox" VerticalAlignment="Center" Content="Type"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoTypeTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoBodyStyleCheckBox" VerticalAlignment="Center" Content="Body Style"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoBodyStyleTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoConfigTypeCheckBox" VerticalAlignment="Center" Content="Config Type"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoConfigTypeTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoYearCheckBox" VerticalAlignment="Center" Content="Default Year"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoYearTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoValueCheckBox" VerticalAlignment="Center" Content="Value"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoValueTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="*"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <CheckBox x:Name="AutoPopulationCheckBox" VerticalAlignment="Center" Content="Population"/>
-                                                    <TextBox Grid.Column="1" x:Name="AutoPopulationTextBox" Margin="8,0,0,0"/>
-                                                </Grid>
-                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                                    <Button Content="Save" Click="AutoFillSettingsSave_Click"/>
+                                    <Button Content="Auto Fill" Height="30" MinWidth="88" Padding="12,4" VerticalAlignment="Center" Click="AutoFillMissing_Click"/>
+                                    <Popup x:Name="AutoFillSettingsPopup"
+       Placement="Bottom"
+       PlacementTarget="{Binding ElementName=AutoFillSettingsButton}"
+       StaysOpen="False"
+       AllowsTransparency="True">
+                                        <Border Background="{DynamicResource PopupBackgroundBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="12"
+            Width="360"
+            Height="560">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Text="Settings"
+                       FontWeight="SemiBold"/>
+
+                                                <ScrollViewer Grid.Row="1"
+                                                              VerticalScrollBarVisibility="Auto"
+                                                              Margin="0,10,0,12">
+                                                    <StackPanel Margin="0,0,4,0">
+                                                        <Grid Margin="0,0,0,10">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Text="Dark mode"
+               VerticalAlignment="Center"
+               Margin="0,0,8,0"/>
+
+                                                            <mah:ToggleSwitch x:Name="ThemeToggleSwitch"
+                      Grid.Column="1"
+                      IsOn="False"
+                      Width="70"
+                      Height="30"
+                      VerticalAlignment="Center"
+                      Toggled="ThemeToggleSwitch_Toggled"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,10">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Text="Backup before save"
+               VerticalAlignment="Center"
+               Margin="0,0,8,0"/>
+
+                                                            <mah:ToggleSwitch x:Name="BackupToggleSwitch"
+                      Grid.Column="1"
+                      IsOn="False"
+                      Width="70"
+                      Height="30"
+                      VerticalAlignment="Center"
+                      Toggled="BackupToggleSwitch_Toggled"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="80"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Text="Input into 'Vehicles'"
+               VerticalAlignment="Center"
+               Margin="0,0,8,0"/>
+
+                                                            <mah:ToggleSwitch x:Name="VehiclesToggleSwitch"
+                      Grid.Column="1"
+                      IsOn="False"
+                      Width="70"
+                      Height="30"
+                      VerticalAlignment="Center"
+                      Toggled="VehiclesToggleSwitch_Toggled"/>
+                                                        </Grid>
+                                                        <Separator Margin="0,0,0,12"/>
+
+                                                        <TextBlock Text="Auto-fill"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource MutedForegroundBrush}"
+                       Margin="0,0,0,8"/>
+
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoBrandCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Brand"/>
+                                                            <TextBox Grid.Column="1"
+                         x:Name="AutoBrandTextBox"
+                         Margin="8,0,0,0"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoCountryCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Country"/>
+                                                            <TextBox Grid.Column="1"
+                         x:Name="AutoCountryTextBox"
+                         Margin="8,0,0,0"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoTypeCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Type"/>
+                                                            <TextBox Grid.Column="1"
+                         x:Name="AutoTypeTextBox"
+                         Margin="8,0,0,0"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoBodyStyleCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Body Style"/>
+                                                            <TextBox Grid.Column="1"
+                         x:Name="AutoBodyStyleTextBox"
+                         Margin="8,0,0,0"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoConfigTypeCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Config Type"/>
+                                                            <TextBox Grid.Column="1"
+                         x:Name="AutoConfigTypeTextBox"
+                         Margin="8,0,0,0"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoYearCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Default Year"/>
+                                                            <mah:NumericUpDown Grid.Column="1"
+                                   x:Name="AutoYearUpDown"
+                                   Margin="8,0,0,0"
+                                   Minimum="1900"
+                                   Maximum="2200"
+                                   Interval="1"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoValueCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Value"/>
+                                                            <mah:NumericUpDown Grid.Column="1"
+                                   x:Name="AutoValueUpDown"
+                                   Margin="8,0,0,0"
+                                   Minimum="0"
+                                   Interval="100"/>
+                                                        </Grid>
+
+                                                        <Grid Margin="0,0,0,0">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <CheckBox x:Name="AutoPopulationCheckBox"
+                          VerticalAlignment="Center"
+                          Content="Population"/>
+                                                            <mah:NumericUpDown Grid.Column="1"
+                                   x:Name="AutoPopulationUpDown"
+                                   Margin="8,0,0,0"
+                                   Minimum="0"
+                                   Maximum="1000000"
+                                   Interval="10"/>
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </ScrollViewer>
+
+                                                <StackPanel Grid.Row="2"
+                                                            Orientation="Horizontal"
+                                                            HorizontalAlignment="Right">
+                                                    <Button Content="Save"
+                                                            Click="AutoFillSettingsSave_Click"/>
                                                 </StackPanel>
-                                            </StackPanel>
+                                            </Grid>
                                         </Border>
                                     </Popup>
                                     <Button Content="&#xE74E;" Margin="8,0,0,0"
-                                            Width="32" Height="28" Padding="0" VerticalAlignment="Center"
+                                            Style="{StaticResource ToolbarIconButtonStyle}" VerticalAlignment="Center"
                                             FontFamily="Segoe MDL2 Assets" FontSize="14"
                                             Click="SaveChanges_Click"/>
                                     <Button Content="&#xE72C;" Margin="8,0,0,0"
-                                            Width="32" Height="28" Padding="0" VerticalAlignment="Center"
+                                            Style="{StaticResource ToolbarIconButtonStyle}" VerticalAlignment="Center"
                                             FontFamily="Segoe MDL2 Assets" FontSize="14"
                                             Click="ReloadSelected_Click"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
 
-                        <Border x:Name="UnsavedBadge" Background="#2A323F" CornerRadius="10" Padding="8,2"
-                                Margin="0,0,0,10" VerticalAlignment="Center" Visibility="Collapsed">
-                            <TextBlock Text="Unsaved changes" Foreground="{StaticResource TextPrimary}" FontSize="11"/>
+                        <Border x:Name="UnsavedBadge"
+                                Background="{DynamicResource StatusBadgeBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="10,4"
+                                Margin="0,0,0,8"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Unsaved changes" Foreground="{DynamicResource AppForegroundBrush}" FontSize="11" FontWeight="SemiBold"/>
+                            </StackPanel>
                         </Border>
 
-                        <Grid Margin="0,0,0,12">
+                        <Grid Margin="0,0,0,2">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="108"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
@@ -432,40 +840,63 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
-                            <TextBlock x:Name="BrandLabel" Grid.Row="0" Text="Brand" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="BrandTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="BrandLabel" Grid.Row="0" Text="Brand" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="BrandTextBox" Margin="10,2" TextChanged="FieldTextChanged"/>
 
-                            <TextBlock x:Name="CountryLabel" Grid.Row="1" Text="Country" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="CountryTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="CountryLabel" Grid.Row="1" Text="Country" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="CountryTextBox" Margin="10,2" TextChanged="FieldTextChanged"/>
 
-                            <TextBlock x:Name="TypeLabel" Grid.Row="2" Text="Type" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="TypeTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="TypeLabel" Grid.Row="2" Text="Type" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="TypeTextBox" Margin="10,2" TextChanged="FieldTextChanged"/>
 
-                            <TextBlock x:Name="BodyStyleLabel" Grid.Row="3" Text="Body Style" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="3" Grid.Column="1" x:Name="BodyStyleTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="BodyStyleLabel" Grid.Row="3" Text="Body Style" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" x:Name="BodyStyleTextBox" Margin="10,2" TextChanged="FieldTextChanged"/>
 
-                            <TextBlock x:Name="ConfigTypeLabel" Grid.Row="4" Text="Config Type" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="4" Grid.Column="1" x:Name="ConfigTypeTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="ConfigTypeLabel" Grid.Row="4" Text="Config Type" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <TextBox Grid.Row="4" Grid.Column="1" x:Name="ConfigTypeTextBox" Margin="10,2" TextChanged="FieldTextChanged"/>
 
-                            <TextBlock x:Name="ConfigurationLabel" Grid.Row="5" Text="Configuration" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="5" Grid.Column="1" x:Name="ConfigurationTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="ConfigurationLabel" Grid.Row="5" Text="Configuration" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <TextBox Grid.Row="5" Grid.Column="1" x:Name="ConfigurationTextBox" Margin="10,2" TextChanged="FieldTextChanged"/>
 
-                            <TextBlock x:Name="YearMinLabel" Grid.Row="6" Text="Year Min" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="6" Grid.Column="1" x:Name="YearMinTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="YearMinLabel" Grid.Row="6" Text="Year Min" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <mah:NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="YearMinUpDown"
+                                               Margin="10,2"
+                                               Minimum="1900" Maximum="2200" Interval="1"
+                                               ValueChanged="NumericFieldChanged"/>
 
-                            <TextBlock x:Name="YearMaxLabel" Grid.Row="7" Text="Year Max" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="7" Grid.Column="1" x:Name="YearMaxTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="YearMaxLabel" Grid.Row="7" Text="Year Max" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <mah:NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="YearMaxUpDown"
+                                               Margin="10,2"
+                                               Minimum="1900" Maximum="2200" Interval="1"
+                                               ValueChanged="NumericFieldChanged"/>
 
-                            <TextBlock x:Name="ValueLabel" Grid.Row="8" Text="Value" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="8" Grid.Column="1" x:Name="ValueTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="ValueLabel" Grid.Row="8" Text="Value" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <mah:NumericUpDown Grid.Row="8" Grid.Column="1" x:Name="ValueUpDown"
+                                               Margin="10,2"
+                                               Minimum="0" Interval="100"
+                                               ValueChanged="NumericFieldChanged"/>
 
-                            <TextBlock x:Name="PopulationLabel" Grid.Row="9" Text="Population" VerticalAlignment="Center"/>
-                            <TextBox Grid.Row="9" Grid.Column="1" x:Name="PopulationTextBox" Margin="10,4" TextChanged="FieldTextChanged"/>
+                            <TextBlock x:Name="PopulationLabel" Grid.Row="9" Text="Population" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <mah:NumericUpDown Grid.Row="9" Grid.Column="1" x:Name="PopulationUpDown"
+                                               Margin="10,2"
+                                               Minimum="0" Maximum="1000000" Interval="10"
+                                               ValueChanged="NumericFieldChanged"/>
 
-                            <TextBlock x:Name="PopulationPresetLabel" Grid.Row="10" Text="Preset" VerticalAlignment="Center"/>
-                            <ComboBox x:Name="PopulationPresetComboBox" Grid.Row="10" Grid.Column="1" Foreground="Black" Margin="10,4"
+                            <TextBlock x:Name="InsuranceClassLabel" Grid.Row="10" Text="Insurance Class" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <ComboBox x:Name="InsuranceClassComboBox" Grid.Row="10" Grid.Column="1" Margin="10,2"
+                                      Style="{StaticResource PresetComboBoxStyle}"
+                                      SelectionChanged="InsuranceClassComboBox_SelectionChanged">
+                                <ComboBoxItem Content="dailyDriver" IsSelected="True"/>
+                                <ComboBoxItem Content="commercial"/>
+                                <ComboBoxItem Content="prestige"/>
+                            </ComboBox>
+
+                            <TextBlock x:Name="PopulationPresetLabel" Grid.Row="11" Text="Preset" Style="{StaticResource FormFieldLabelStyle}"/>
+                            <ComboBox x:Name="PopulationPresetComboBox" Grid.Row="11" Grid.Column="1" Margin="10,2"
+                                      Style="{StaticResource PresetComboBoxStyle}"
                                       SelectionChanged="PopulationPresetComboBox_SelectionChanged">
                                 <ComboBoxItem Content="Custom" IsSelected="False"/>
                                 <ComboBoxItem Content="Ultra-rare (1-50)"/>
@@ -476,19 +907,15 @@
                             </ComboBox>
                         </Grid>
 
-
-                        <TextBlock Text="Parts value audit" Margin="0,16,0,4" FontWeight="SemiBold"/>
-                        <Button Content="Audit Parts Value" HorizontalAlignment="Left" Click="AuditParts_Click"/>
-                        <TextBox x:Name="PartsAuditTextBox" Margin="0,8,0,0" Height="160"
-                                 IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
-                                 Background="#0F1218" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource CardBorder}"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
         </Grid>
 
-        <Border Grid.Row="3" Padding="10" Background="{StaticResource CardBg}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="8">
-            <TextBlock x:Name="StatusTextBlock" Foreground="{StaticResource TextMuted}"/>
+        <Border Grid.Row="3" Padding="10" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+            <TextBlock x:Name="StatusTextBlock" Foreground="{DynamicResource MutedForegroundBrush}"/>
         </Border>
     </Grid>
-</Window>
+</mah:MetroWindow>
+
+
