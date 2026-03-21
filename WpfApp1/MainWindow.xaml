@@ -7,7 +7,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WpfApp1"
         mc:Ignorable="d"
-        Title="BeamNG Mod Marketplace Config Editor" Height="740" Width="1260"
+        Title="BeamNG Marketplace Fixer" Height="900" Width="1580" MinWidth="1280" MinHeight="780"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppBackgroundBrush}"
         FontFamily="Bahnschrift"
@@ -18,215 +18,214 @@
         ShowMinButton="False"
         ShowMaxRestoreButton="False"
         ShowCloseButton="False"
-        PreviewKeyDown="Window_PreviewKeyDown">
+        BorderBrush="{DynamicResource ShellOutlineBrush}"
+        BorderThickness="1"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Icon="pack://application:,,,/beamngvehiclemarketplaceicon%20(1).ico">
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="38" ResizeBorderThickness="6" GlassFrameThickness="0"/>
+        <shell:WindowChrome CaptionHeight="34" ResizeBorderThickness="6" GlassFrameThickness="0"/>
     </shell:WindowChrome.WindowChrome>
-    <Grid x:Name="RootGrid" Margin="14">
+    <Grid x:Name="RootGrid" Margin="0" Background="Transparent">
         <Grid.RowDefinitions>
-            <RowDefinition Height="38"/>
+            <RowDefinition Height="40"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <Canvas IsHitTestVisible="False" ClipToBounds="True" Panel.ZIndex="-1">
+            <Ellipse Width="420" Height="420" Canvas.Left="-130" Canvas.Top="-120" Opacity="0.14">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#4D6AB8FF" Offset="0"/>
+                        <GradientStop Color="#006AB8FF" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <Ellipse Width="520" Height="520" Canvas.Right="-180" Canvas.Top="140" Opacity="0.10">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#3358B0FF" Offset="0"/>
+                        <GradientStop Color="#0058B0FF" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+        </Canvas>
+
         <Border Grid.Row="0"
-        Background="{DynamicResource TitleBarBackgroundBrush}"
+        Background="{DynamicResource TitleBarGradientBrush}"
         BorderBrush="{DynamicResource BorderBrush}"
         BorderThickness="0,0,0,1"
-        Margin="0,0,0,65"
-        Grid.RowSpan="2">
+        Margin="0,0,0,0"
+        >
             <Grid x:Name="TitleBar"
-          Height="43"
+          Height="36"
           VerticalAlignment="Center"
           MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0"
-                   Text="BeamNG Mod Marketplace Config Editor | Discord: @ic.ey"
-                   VerticalAlignment="Center"
-                   Margin="12,0,0,0"
-                   Foreground="{DynamicResource AppForegroundBrush}"
-                   FontWeight="SemiBold"/>
-
-                <Button x:Name="AutoFillSettingsButton"
-                Grid.Column="1"
-                Content="&#xE713;"
-                Margin="0,0,4,0"
-                Style="{StaticResource ToolbarIconButtonStyle}"
+                <Button x:Name="LeftNavToggleButton"
+                Grid.Column="0"
+                Width="34"
+                Height="28"
+                Margin="8,0,0,0"
                 VerticalAlignment="Center"
-                FontFamily="Segoe MDL2 Assets"
+                Style="{StaticResource TitleBarButtonStyle}"
+                Content="☰"
                 FontSize="14"
-                Click="AutoFillSettingsButton_Click"
-                shell:WindowChrome.IsHitTestVisibleInChrome="True" Height="28"/>
+                FontWeight="SemiBold"
+                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                ToolTip="Collapse or expand navigation"
+                Click="LeftNavToggleButton_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Root"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="8">
+                                <ContentPresenter HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                    <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Root" Property="Background" Value="{DynamicResource SelectionBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Root" Property="Opacity" Value="0.65"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
 
-                <Button x:Name="HelpButton"
-                Grid.Column="2"
-                Content="?"
-                Margin="0,0,4,0"
-                Style="{StaticResource ToolbarIconButtonStyle}"
-                VerticalAlignment="Center"
-                FontSize="14"
-                FontWeight="Bold"
-                Click="HelpButton_Click"
-                shell:WindowChrome.IsHitTestVisibleInChrome="True" Height="28"/>
-
-                <Popup x:Name="HelpPopup"
-                       Grid.Column="2"
-                       Placement="Bottom"
-                       PlacementTarget="{Binding ElementName=HelpButton}"
-                       StaysOpen="False"
-                       AllowsTransparency="True">
-                    <Border Background="{DynamicResource PopupBackgroundBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="12"
-                            Width="360"
-                            Height="560">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-
-                            <TextBlock Text="Help and Documentation"
-                                       FontWeight="SemiBold"/>
-
-                            <ScrollViewer Grid.Row="1"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Margin="0,10,0,0">
-                                <StackPanel Margin="0,0,4,0">
-                                    <TextBlock Text="Overview"
-                                               Style="{StaticResource SectionTitleTextBlockStyle}"
-                                               FontSize="14"/>
-                                    <TextBlock TextWrapping="Wrap"
-                                               Margin="0,4,0,10"
-                                               Foreground="{DynamicResource MutedForegroundBrush}"
-                                               Text="This tool scans vehicle info JSON files in your BeamNG mods folder, highlights missing marketplace fields, and lets you save corrected values so vehicles show up in Career Marketplace."/>
-
-                                    <TextBlock Text="Quick Start"
-                                               Style="{StaticResource SectionTitleTextBlockStyle}"
-                                               FontSize="14"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="1. Select your Mods folder and click Scan."/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="2. Pick a config from the list and fill missing fields on the right."/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="3. Choose Insurance Class and verify Year, Value, and Population."/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="4. Click Save. Enable Input into 'Vehicles' if marketplace visibility still fails."/>
-
-                                    <TextBlock Text="Option Reference"
-                                               Style="{StaticResource SectionTitleTextBlockStyle}"
-                                               FontSize="14"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
-                                        <Run FontWeight="SemiBold" Text="Missing only"/>
-                                        <Run Text=" - Shows only configs that still have missing fields."/>
-                                    </TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
-                                        <Run FontWeight="SemiBold" Text="Group by mod"/>
-                                        <Run Text=" - Groups rows by mod package name."/>
-                                    </TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
-                                        <Run FontWeight="SemiBold" Text="Missing first"/>
-                                        <Run Text=" - Sorts configs with missing values to the top."/>
-                                    </TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
-                                        <Run FontWeight="SemiBold" Text="Dark mode"/>
-                                        <Run Text=" - Switches between light and dark UI theme."/>
-                                    </TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}">
-                                        <Run FontWeight="SemiBold" Text="Backup before save"/>
-                                        <Run Text=" - Creates a .bak copy before the first write."/>
-                                    </TextBlock>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}">
-                                        <Run FontWeight="SemiBold" Text="Input into 'Vehicles'"/>
-                                        <Run Text=" - Mirrors saved info, matching .pc, and preview images into the vehicles folder sibling to your mods folder."/>
-                                    </TextBlock>
-
-                                    <TextBlock Text="Field Guide"
-                                               Style="{StaticResource SectionTitleTextBlockStyle}"
-                                               FontSize="14"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Insurance Class values: dailyDriver, commercial, prestige."/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Region is force-set to northAmerica when saving."/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="Population presets are shortcuts only; Custom means your numeric value is used."/>
-
-                                    <TextBlock Text="Keybinds"
-                                               Style="{StaticResource SectionTitleTextBlockStyle}"
-                                               FontSize="14"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+F - Focus search"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+S - Save selected config"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+R - Reload selected config"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Ctrl+A - Auto-fill missing fields"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Up/Down - Move config selection"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="Esc - Close open popup"/>
-
-                                    <TextBlock Text="Troubleshooting"
-                                               Style="{StaticResource SectionTitleTextBlockStyle}"
-                                               FontSize="14"/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,4,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Vehicle still not in marketplace: save again with Input into 'Vehicles' enabled."/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,2" Foreground="{DynamicResource MutedForegroundBrush}" Text="Mirror warning about vehicles path: verify mods and vehicles are sibling folders under the same BeamNG root."/>
-                                    <TextBlock TextWrapping="Wrap" Margin="0,0,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="If fields stay marked missing, check for empty values and invalid year range."/>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </Grid>
+                <Grid Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Width="22" Height="22" CornerRadius="6" Background="Transparent" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/beamngvehiclemarketplaceicon%20(1).ico" Width="14" Height="14" Opacity="0.92" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                </Popup>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="BeamNG Marketplace Fixer Enhanced" Foreground="{DynamicResource AppForegroundBrush}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center"/>
+                        <TextBlock Text="Original Marketplace Fixer by Calebic | Discord: @ic.ey     Enhanced Marketplace version by T-ShadowOfficial | Discord:xxtshadowofficialxx"
+                                   Margin="10,1,0,0"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
+                                   FontStyle="Italic"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
 
-                <Button Grid.Column="3"
+                <Button Grid.Column="2"
                 Content="&#x2014;"
-                Margin="0,4,0,4"
+                Margin="0,0,0,0"
+                VerticalAlignment="Center"
                 Style="{StaticResource TitleBarButtonStyle}"
                 shell:WindowChrome.IsHitTestVisibleInChrome="True"
                 Click="Minimize_Click"/>
 
+                <Button x:Name="MaxRestoreButton" Grid.Column="3"
+                Margin="4,0,0,0"
+                VerticalAlignment="Center"
+                Style="{StaticResource TitleBarButtonStyle}"
+                shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                Click="MaximizeRestore_Click"
+                ToolTip="Maximize or restore window">
+                    <TextBlock x:Name="MaxRestoreGlyph"
+                               Text="&#x25A1;"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Button>
+
                 <Button Grid.Column="4"
                 Content="&#x2715;"
-                Margin="4,4,8,4"
+                Margin="4,0,8,0"
+                VerticalAlignment="Center"
                 Style="{StaticResource TitleBarDangerButtonStyle}"
                 shell:WindowChrome.IsHitTestVisibleInChrome="True"
                 Click="Close_Click"/>
             </Grid>
         </Border>
 
-        <Border Grid.Row="1" Padding="14" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Margin="0,10,0,0">
+        <Border Grid.Row="1" Padding="16,12" Style="{StaticResource PanelCardBorderStyle}" Margin="14,10,14,0">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Mods folder" VerticalAlignment="Center"/>
-                <TextBox x:Name="ModsPathTextBox" Grid.Column="1" Margin="12,0,12,0" MinWidth="380"
-                         mah:TextBoxHelper.ClearTextButton="True"/>
-                <Button x:Name="BrowseButton" Grid.Column="2" Content="Browse" Width="108" Margin="0,0,10,0" Click="BrowseMods_Click"/>
-                <Button x:Name="ScanButton" Grid.Column="3" Content="Scan" Width="72" Margin="0,0,14,0" Click="ScanMods_Click"/>
-                <StackPanel Grid.Column="4" Margin="0" Orientation="Horizontal" VerticalAlignment="Center"/>
+
+                <StackPanel Orientation="Vertical">
+                    <TextBlock Text="Mods Location" FontSize="15" FontWeight="SemiBold"/>
+                    <TextBlock Margin="0,4,0,0" Text="Choose your mods folder, scan it, then review or autofill results from the workspace below." Foreground="{DynamicResource MutedForegroundBrush}"/>
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="ModsPathTextBox" Grid.Column="0" Margin="0" MinHeight="36" VerticalContentAlignment="Center" mah:TextBoxHelper.ClearTextButton="True"/>
+                        <Button x:Name="BrowseButton" Grid.Column="1" Content="Browse" MinWidth="110" Margin="12,0,0,0" Click="BrowseMods_Click"/>
+                        <Button x:Name="ScanButton" Grid.Column="2" Content="Scan" MinWidth="94" Margin="10,0,0,0" Click="ScanMods_Click"/>
+                        <Button x:Name="AutoFillAllButton" Grid.Column="3" Content="Auto Fill All" MinWidth="126" Margin="10,0,0,0" Click="AutoFillAll_Click"/>
+                                            </Grid>
+                </StackPanel>
+
+
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2" Margin="0,14,0,14">
+        <Grid x:Name="MainWorkspaceGrid" Grid.Row="2" Margin="14,14,14,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*"/>
-                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition x:Name="LeftNavColumn" Width="160"/>
+                <ColumnDefinition x:Name="LeftNavSpacerColumn" Width="8"/>
+                <ColumnDefinition Width="3.15*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="1.28*" MinWidth="390"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Padding="10" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+            <Border x:Name="NavigationRailBorder" Grid.Column="0" Padding="14" Style="{StaticResource PanelCardBorderStyle}">
+                <StackPanel>
+                    <Button x:Name="DashboardNavButton" Style="{StaticResource NavigationButtonStyle}" Margin="0,0,0,8" Click="WorkspaceNavButton_Click" Tag="Dashboard">Dashboard</Button>
+                    <Button x:Name="ResultsNavButton" Style="{StaticResource NavigationButtonActiveStyle}" Margin="0,0,0,8" Click="WorkspaceNavButton_Click" Tag="Results">Configuration Editor</Button>
+                    <Button x:Name="ReviewQueueNavButton" Style="{StaticResource NavigationButtonStyle}" Margin="0,0,0,8" Click="WorkspaceNavButton_Click" Tag="ReviewQueue">Flagged Configs</Button>
+                    <Button x:Name="RenamerNavButton" Style="{StaticResource NavigationButtonStyle}" Margin="0,0,0,8" Click="WorkspaceNavButton_Click" Tag="Renamer">Mod Library</Button>
+                    <Button x:Name="LicensePlatesNavButton" Style="{StaticResource NavigationButtonStyle}" Margin="0,0,0,8" Click="WorkspaceNavButton_Click" Tag="LicensePlates">License Plates</Button>
+                    <Button x:Name="LogsNavButton" Style="{StaticResource NavigationButtonStyle}" Margin="0,0,0,8" Click="WorkspaceNavButton_Click" Tag="Logs">Logs</Button>
+                    <Button x:Name="DataNavButton" Style="{StaticResource NavigationButtonStyle}" Margin="0,0,0,8" Click="WorkspaceNavButton_Click" Tag="Data">Data / JSON</Button>
+                    <Button x:Name="SettingsNavButton" Style="{StaticResource NavigationButtonStyle}" Click="WorkspaceNavButton_Click" Tag="Settings">Settings</Button>
+                </StackPanel>
+            </Border>
+
+            <GridSplitter x:Name="InspectorSplitter" Grid.Column="3" Width="10" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="Transparent"/>
+
+            <Border x:Name="ResultsWorkspaceBorder" Grid.Column="2" Padding="12" Style="{StaticResource PanelCardBorderStyle}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Text="Configs" FontSize="16" Style="{StaticResource SectionTitleTextBlockStyle}" Margin="2,0,0,10"/>
+                    <TextBlock Text="Configuration Editor" FontSize="18" Style="{StaticResource SectionTitleTextBlockStyle}" Margin="2,0,0,10"/>
                     <Grid Grid.Row="1" Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -535,10 +534,22 @@
                                                     <Setter TargetName="StatusBadge" Property="Background" Value="#14FF3B30"/>
                                                     <Setter TargetName="StatusBadge" Property="BorderBrush" Value="#30FF3B30"/>
                                                 </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsSuspicious}" Value="True">
+                                                    <Setter TargetName="StatusText" Property="Text" Value="!"/>
+                                                    <Setter TargetName="StatusText" Property="Foreground" Value="#C2410C"/>
+                                                    <Setter TargetName="StatusBadge" Property="Background" Value="#14F59E0B"/>
+                                                    <Setter TargetName="StatusBadge" Property="BorderBrush" Value="#30F59E0B"/>
+                                                </DataTrigger>
                                             </DataTemplate.Triggers>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
+
+                                <DataGridTextColumn Header="Autofill" Binding="{Binding LastAutoFillStatus}" Width="1.4*" MinWidth="120"/>
+
+                                <DataGridTextColumn Header="Method" Binding="{Binding LastAutoFillSource}" Width="1.5*" MinWidth="140"/>
+
+                                <DataGridTextColumn Header="Review" Binding="{Binding ReviewReason}" Width="2.2*" MinWidth="180"/>
 
                                 <DataGridTemplateColumn Width="2*" MinWidth="160">
                                     <DataGridTemplateColumn.HeaderStyle>
@@ -567,49 +578,63 @@
                 </Grid>
             </Border>
 
-            <Border Grid.Column="1" Margin="14,0,0,0" Padding="14" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+            <Border x:Name="InspectorBorder" Grid.Column="4" Padding="16" Style="{StaticResource PanelCardBorderStyle}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="Config details" FontSize="16" Style="{StaticResource SectionTitleTextBlockStyle}"/>
-                        <TextBlock x:Name="ConfigPathText" Margin="0,4,0,6" Foreground="{DynamicResource MutedForegroundBrush}"
-                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                        <TextBlock Text="Configuration Editor" FontSize="16" Style="{StaticResource SectionTitleTextBlockStyle}"/>
+                        <TextBlock x:Name="ConfigPathText" Visibility="Collapsed" Margin="0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
 
-                        <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="ConfigSummaryText" Foreground="{DynamicResource AppForegroundBrush}" FontWeight="SemiBold" Margin="0,0,12,0"/>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                                    <Button Content="Auto Fill" Height="30" MinWidth="88" Padding="12,4" VerticalAlignment="Center" Click="AutoFillMissing_Click"/>
-                                    <Popup x:Name="AutoFillSettingsPopup"
+                        <TextBlock x:Name="ConfigSummaryText" Visibility="Collapsed" Foreground="{DynamicResource AppForegroundBrush}" FontWeight="SemiBold" Margin="0"/>
+                        <TextBlock x:Name="SelectedModInfoTextBlock" Visibility="Collapsed" Foreground="{DynamicResource MutedForegroundBrush}" Margin="0" TextWrapping="Wrap"/>
+
+                        <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="16" Padding="12" Margin="0,4,0,12" HorizontalAlignment="Stretch">
+                            <StackPanel>
+                                <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Stretch">
+                                    <Grid x:Name="ConfigPrimaryActionGrid" Width="460" HorizontalAlignment="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button Grid.Column="0" Content="Auto Fill" MinWidth="104" Height="40" Padding="16,6" Click="AutoFillMissing_Click"/>
+                                        <Button Grid.Column="2" Content="Internet Lookup" MinWidth="104" Height="40" Padding="16,6" Click="InternetLookup_Click"/>
+                                        <Button Grid.Column="4" Content="Config Plate" MinWidth="104" Height="40" Padding="16,6" Click="ConfigPlate_Click"/>
+                                        <Button x:Name="CancelAutoFillAllButton" Grid.Column="6" Content="Cancel run" MinWidth="104" Height="40" Padding="16,6" Click="CancelAutoFillAll_Click" IsEnabled="False"/>
+                                    </Grid>
+                                </Viewbox>
+                                <Button x:Name="BulkEditFieldsButton" Content="Bulk Edit Fields" Height="38" Margin="0,12,0,0" Click="OpenBulkEdit_Click"/>
+                            </StackPanel>
+                        </Border>
+                                <Popup x:Name="AutoFillSettingsPopup"
        Placement="Bottom"
-       PlacementTarget="{Binding ElementName=AutoFillSettingsButton}"
+       PlacementTarget="{Binding ElementName=CancelAutoFillAllButton}"
        StaysOpen="False"
        AllowsTransparency="True">
-                                        <Border Background="{DynamicResource PopupBackgroundBrush}"
+                                    <Border Background="{DynamicResource PopupBackgroundBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
             CornerRadius="8"
             Padding="12"
             Width="360"
             Height="560">
-                                            <Grid>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="*"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                </Grid.RowDefinitions>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
 
-                                                <TextBlock Text="Settings"
+                                            <TextBlock Text="Settings"
                        FontWeight="SemiBold"/>
 
-                                                <ScrollViewer Grid.Row="1"
+                                            <ScrollViewer Grid.Row="1"
                                                               VerticalScrollBarVisibility="Auto"
                                                               Margin="0,10,0,12">
-                                                    <StackPanel Margin="0,0,4,0">
+                                                <StackPanel Margin="0,0,4,0">
                                                         <Grid Margin="0,0,0,10">
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="*"/>
@@ -787,26 +812,15 @@
                                                     </StackPanel>
                                                 </ScrollViewer>
 
-                                                <StackPanel Grid.Row="2"
-                                                            Orientation="Horizontal"
-                                                            HorizontalAlignment="Right">
-                                                    <Button Content="Save"
-                                                            Click="AutoFillSettingsSave_Click"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </Border>
-                                    </Popup>
-                                    <Button Content="&#xE74E;" Margin="8,0,0,0"
-                                            Style="{StaticResource ToolbarIconButtonStyle}" VerticalAlignment="Center"
-                                            FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                            Click="SaveChanges_Click"/>
-                                    <Button Content="&#xE72C;" Margin="8,0,0,0"
-                                            Style="{StaticResource ToolbarIconButtonStyle}" VerticalAlignment="Center"
-                                            FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                            Click="ReloadSelected_Click"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
+                                            <StackPanel Grid.Row="2"
+                                                        Orientation="Horizontal"
+                                                        HorizontalAlignment="Right">
+                                                <Button Content="Save"
+                                                        Click="AutoFillSettingsSave_Click"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Popup>
 
                         <Border x:Name="UnsavedBadge"
                                 Background="{DynamicResource StatusBadgeBackgroundBrush}"
@@ -829,6 +843,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -905,6 +920,16 @@
                                 <ComboBoxItem Content="Common (800-3000)"/>
                                 <ComboBoxItem Content="Very common (3000-10000)"/>
                             </ComboBox>
+
+                            <Button x:Name="SaveChangesButton" Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="2"
+                                    Content="Save"
+                                    HorizontalAlignment="Center"
+                                    MinWidth="220"
+                                    Height="38"
+                                    Margin="0,18,0,0"
+                                    Padding="18,6"
+                                    Click="SaveChanges_Click"
+                                    IsEnabled="False"/>
                         </Grid>
 
                     </StackPanel>
@@ -912,9 +937,506 @@
             </Border>
         </Grid>
 
-        <Border Grid.Row="3" Padding="10" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
-            <TextBlock x:Name="StatusTextBlock" Foreground="{DynamicResource MutedForegroundBrush}"/>
+
+            <Border Panel.ZIndex="5" x:Name="DashboardPage" Grid.Row="2" Margin="14,14,14,12" Grid.Column="2" Grid.ColumnSpan="3" Padding="18" Style="{StaticResource PanelCardBorderStyle}" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Dashboard" FontSize="20" FontWeight="SemiBold"/>
+                            <TextBlock Margin="0,6,0,0" Text="Track scan health, review counts, recent activity, and jump directly into the pages that need attention." Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <UniformGrid Grid.Row="1" Margin="0,18,0,18" Columns="5">
+                            <Border Style="{StaticResource AccentPanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Mods" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DashboardModsCountTextBlock" Text="0" FontSize="28" FontWeight="SemiBold"/></StackPanel></Border>
+                            <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Configs" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock Text="{Binding Configs.Count}" FontSize="28" FontWeight="SemiBold"/></StackPanel></Border>
+                            <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Needs review" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DashboardReviewCountTextBlock" Text="0" FontSize="28" FontWeight="SemiBold"/></StackPanel></Border>
+                            <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Missing fields" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DashboardMissingCountTextBlock" Text="0" FontSize="28" FontWeight="SemiBold"/></StackPanel></Border>
+                            <Border Style="{StaticResource PanelCardBorderStyle}" Padding="16,14"><StackPanel><TextBlock Text="Suspicious" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DashboardSuspiciousCountTextBlock" Text="0" FontSize="28" FontWeight="SemiBold"/></StackPanel></Border>
+                        </UniformGrid>
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="1.25*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Quick actions" FontSize="16" FontWeight="SemiBold"/>
+                                    <TextBlock Margin="0,6,0,14" Foreground="{DynamicResource MutedForegroundBrush}" Text="Jump back into results, open the review queue, or open the mod library and review workflow." TextWrapping="Wrap"/>
+                                    <WrapPanel>
+                                        <Button Content="Open Configuration Editor" Padding="16,8" Margin="0,0,10,10" Click="OpenResultsPage_Click"/>
+                                        <Button Content="Open Review Queue" Padding="16,8" Margin="0,0,10,10" Click="OpenReviewQueuePage_Click"/>
+                                        <Button Content="Open Mod Library" Padding="16,8" Margin="0,0,10,10" Click="OpenRenamerPage_Click"/>
+                                    </WrapPanel>
+                                    <Border Margin="0,8,0,0" Style="{StaticResource PanelCardBorderStyle}" Padding="14">
+                                        <StackPanel>
+                                            <TextBlock Text="Install summary" FontWeight="SemiBold"/>
+                                            <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" x:Name="DashboardInstallSummaryTextBlock" Text="Scan a repo to show how many unique mods, brands, and flagged items were detected."/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                            <Grid Grid.Column="1" Margin="14,0,0,0">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Border Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                                    <StackPanel>
+                                        <TextBlock Text="Top brands in repo" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock Margin="0,8,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="This breakdown updates after scans and autofill runs so you can see what the repo is mostly made of. Click a brand row to open a breakdown window showing the source zips and configs currently counted under it." TextWrapping="Wrap"/>
+                                        <DataGrid x:Name="DashboardBrandStatsGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False" ColumnWidth="*" RowHeight="30" MinHeight="170" MouseLeftButtonUp="DashboardBrandStatsGrid_MouseLeftButtonUp" Cursor="Hand">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Brand" Binding="{Binding Label}" Width="*"/>
+                                                <DataGridTextColumn Header="Configs" Binding="{Binding Count}" Width="0.7*"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Row="1" Margin="0,14,0,0" Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                                    <StackPanel>
+                                        <TextBlock Text="Recent activity" FontSize="16" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="DashboardRecentActivityTextBlock" Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Text="Scan a repo or run autofill to populate this dashboard with live status context."/>
+                                        <Border Margin="0,14,0,0" Style="{StaticResource PanelCardBorderStyle}" Padding="14">
+                                            <StackPanel>
+                                                <TextBlock Text="Issue sources" FontWeight="SemiBold"/>
+                                                <TextBlock x:Name="DashboardIssueSummaryTextBlock" Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Text="No issue sources recorded yet."/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+
+            <Border Panel.ZIndex="5" x:Name="ReviewQueuePage" Grid.Row="2" Margin="14,14,14,12" Grid.Column="2" Grid.ColumnSpan="3" Padding="18" Style="{StaticResource PanelCardBorderStyle}" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel><TextBlock Text="Flagged Configs" FontSize="20" FontWeight="SemiBold"/><TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Inspect individual configs that were marked missing, suspicious, or otherwise in need of review before you edit them manually." TextWrapping="Wrap"/></StackPanel>
+                    <Border Grid.Row="1" Margin="0,18,0,0" Style="{StaticResource PanelCardBorderStyle}" Padding="14"><TextBlock x:Name="ReviewQueueSummaryTextBlock" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Text="Flagged configs show up here with their review reason so you can decide what to correct next."/></Border>
+                    <DataGrid x:Name="FlaggedConfigsGrid" Grid.Row="2" Margin="0,14,0,0" ItemsSource="{Binding FlaggedConfigs}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" ColumnWidth="*" RowHeight="32" SelectionMode="Single" SelectionUnit="FullRow" SelectionChanged="FlaggedConfigsGrid_SelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Vehicle" Binding="{Binding VehicleName}" Width="2.3*"/>
+                            <DataGridTextColumn Header="Mod" Binding="{Binding ModName}" Width="1.6*"/>
+                            <DataGridTextColumn Header="Review reason" Binding="{Binding ReviewReason}" Width="2.8*"/>
+                            <DataGridTextColumn Header="Missing" Binding="{Binding HasMissingText}" Width="0.7*"/>
+                            <DataGridTextColumn Header="Suspicious" Binding="{Binding IsSuspiciousText}" Width="0.8*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+
+            <Border Panel.ZIndex="5" x:Name="RenamerPage" Grid.Row="2" Margin="14,14,14,12" Grid.Column="2" Grid.ColumnSpan="3" Padding="18" Style="{StaticResource PanelCardBorderStyle}" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Mod Library" FontSize="20" FontWeight="SemiBold"/>
+                        <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Browse the detected mods in the current workspace, see which ones are maps or vehicles, check review pressure by mod, and launch the review wizard only when a mod still needs help." TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <UniformGrid Grid.Row="1" Margin="0,18,0,0" Columns="4">
+                        <Border Style="{StaticResource AccentPanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Detected mods" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="RenamerDetectedModsCountTextBlock" Text="0" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+                        <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Vehicle mods" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="RenamerVehicleModsCountTextBlock" Text="0" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+                        <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Map mods" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="RenamerMapModsCountTextBlock" Text="0" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+                        <Border Style="{StaticResource PanelCardBorderStyle}" Padding="16,14"><StackPanel><TextBlock Text="Review queue mods" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="RenamerQueuedCountTextBlock" Text="0" FontSize="26" FontWeight="SemiBold"/></StackPanel></Border>
+                    </UniformGrid>
+                    <Grid Grid.Row="2" Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="1.45*"/><ColumnDefinition Width="0.95*"/></Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Workspace mods" FontWeight="SemiBold"/>
+                                    <TextBlock Margin="0,8,0,10" Foreground="{DynamicResource MutedForegroundBrush}" Text="Each row groups configs by detected mod so you can quickly spot noisy packs, map-only content, and mods that still need review or hints." TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <DataGrid x:Name="ModLibraryGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False" ColumnWidth="*" RowHeight="30" MinHeight="220">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Mod" Binding="{Binding Label}" Width="*"/>
+                                        <DataGridTextColumn Header="Configs" Binding="{Binding Count}" Width="0.55*"/>
+                                        <DataGridTextColumn Header="Review" Binding="{Binding ReviewCount}" Width="0.5*"/>
+                                        <DataGridTextColumn Header="Type" Binding="{Binding Category}" Width="0.7*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Column="1" Style="{StaticResource PanelCardBorderStyle}" Padding="16" Margin="14,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Review workflow" FontWeight="SemiBold"/>
+                                <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Run Scan, then Auto Fill All. Use this page to see which mods still have flagged configs. When a mod still needs help, open the review wizard, add corrected make/model/year hints, retry only those mods, or ignore noisy ones so they stop returning." TextWrapping="Wrap"/>
+                                <Border Margin="0,14,0,0" Style="{StaticResource PanelCardBorderStyle}" Padding="14">
+                                    <StackPanel>
+                                        <TextBlock Text="Ignored mods" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="RenamerIgnoredCountTextBlock" Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="0 mod(s) are currently ignored from review retry passes." TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                                <Button Content="Open Review Wizard" Margin="0,14,0,0" Padding="16,8" HorizontalAlignment="Left" Click="OpenRenamerWizardAgain_Click"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+
+                                    <Border Panel.ZIndex="5" x:Name="LicensePlatesPage" Grid.Row="2" Margin="14,14,14,12" Grid.Column="2" Grid.ColumnSpan="3" Padding="0" Style="{StaticResource PanelCardBorderStyle}" Visibility="Collapsed">
+                <Border.Resources>
+                    <Style x:Key="PlateActionRadioStylePage" TargetType="RadioButton">
+                        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+                        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="Padding" Value="14,12"/>
+                        <Setter Property="Margin" Value="0,0,0,10"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="RadioButton">
+                                    <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <Grid Width="24" Height="24" VerticalAlignment="Center">
+                                                <Ellipse x:Name="OuterDot" Width="24" Height="24" Fill="Transparent" Stroke="{DynamicResource BorderBrush}" StrokeThickness="1.5"/>
+                                                <Ellipse x:Name="InnerDot" Width="10" Height="10" Fill="{DynamicResource AccentBrush}" Visibility="Collapsed"/>
+                                            </Grid>
+                                            <ContentPresenter Grid.Column="2" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                                        </Grid>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                            <Setter TargetName="OuterDot" Property="Stroke" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="InnerDot" Property="Visibility" Value="Visible"/>
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.62"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                    <Style x:Key="PlatePreviewGridStylePage" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+                        <Setter Property="HeadersVisibility" Value="Column"/>
+                        <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+                        <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+                        <Setter Property="RowHeight" Value="34"/>
+                        <Setter Property="ColumnHeaderHeight" Value="38"/>
+                    </Style>
+                    <Style x:Key="PlateFooterButtonStylePage" TargetType="Button">
+                        <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+                        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="Padding" Value="18,10"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                            <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Root" Property="Opacity" Value="0.55"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Border.Resources>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid Margin="18">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="18"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="18"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="18"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="18"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="18"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource AccentPanelCardBorderStyle}" Padding="20,18">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Border Width="54" Height="54" CornerRadius="15" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
+                                    <Viewbox Width="22" Height="22" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Canvas Width="24" Height="24">
+                                            <Ellipse Canvas.Left="3" Canvas.Top="7" Width="18" Height="10" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.8"/>
+                                            <Rectangle Canvas.Left="6" Canvas.Top="9" Width="12" Height="6" RadiusX="1.5" RadiusY="1.5" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.6"/>
+                                            <Ellipse Canvas.Left="8" Canvas.Top="11" Width="2.5" Height="2.5" Fill="{DynamicResource AccentBrush}"/>
+                                            <Ellipse Canvas.Left="13.5" Canvas.Top="11" Width="2.5" Height="2.5" Fill="{DynamicResource AccentBrush}"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                </Border>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="License Plate Manager" FontSize="26" FontWeight="SemiBold"/>
+                                    <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Choose whether the plate operation should target one mod, selected configs, or everything in the workspace." TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="2" Style="{StaticResource PanelCardBorderStyle}" Padding="18">
+                            <StackPanel>
+                                <TextBlock Text="Where should this apply?" FontSize="20" FontWeight="SemiBold"/>
+                                <TextBlock Margin="0,6,0,18" Foreground="{DynamicResource MutedForegroundBrush}" Text="Bulk Plates now supports three scopes. Pick Mod, Config, or Everything, then choose the exact target when needed." TextWrapping="Wrap"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <RadioButton x:Name="LicensePageModScopeRadioButton" Grid.Column="0" Style="{StaticResource PlateActionRadioStylePage}" Checked="LicensePageScopeRadioButton_Checked" Margin="0"><StackPanel><TextBlock Text="Mod" FontSize="16" FontWeight="SemiBold"/><TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Choose one loaded mod and update every matching config inside it." TextWrapping="Wrap"/></StackPanel></RadioButton>
+                                    <RadioButton x:Name="LicensePageConfigScopeRadioButton" Grid.Column="2" Style="{StaticResource PlateActionRadioStylePage}" Checked="LicensePageScopeRadioButton_Checked" Margin="0"><StackPanel><TextBlock Text="Config" FontSize="16" FontWeight="SemiBold"/><TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Pick one or more individual configs from a selection list." TextWrapping="Wrap"/></StackPanel></RadioButton>
+                                    <RadioButton x:Name="LicensePageWorkspaceScopeRadioButton" Grid.Column="4" Style="{StaticResource PlateActionRadioStylePage}" Checked="LicensePageScopeRadioButton_Checked" Margin="0"><StackPanel><TextBlock Text="Everything" FontSize="16" FontWeight="SemiBold"/><TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Apply the same change to every loaded config that qualifies." TextWrapping="Wrap"/></StackPanel></RadioButton>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="LicensePageTargetSelectionBorder" Grid.Row="4" Style="{StaticResource PanelCardBorderStyle}" Padding="18" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" x:Name="LicensePageModSelectionPanel">
+                                    <TextBlock Text="Choose a mod" Style="{StaticResource FormFieldLabelStyle}"/>
+                                    <ComboBox x:Name="LicensePageModPickerComboBox" Style="{StaticResource PresetComboBoxStyle}" Margin="0,10,0,0" Height="40" VerticalContentAlignment="Center" SelectionChanged="LicensePageModPickerComboBox_SelectionChanged" DisplayMemberPath="DisplayLabel"/>
+                                    <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Only shown when Mod scope is selected." TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" x:Name="LicensePageConfigSelectionPanel">
+                                    <TextBlock Text="Choose config(s)" Style="{StaticResource FormFieldLabelStyle}"/>
+                                    <Border Margin="0,10,0,0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Background="{DynamicResource CardBackgroundBrush}" Padding="8">
+                                        <ListBox x:Name="LicensePageConfigPickerListBox" MinHeight="170" SelectionMode="Extended" SelectionChanged="LicensePageConfigPickerListBox_SelectionChanged" DisplayMemberPath="DisplayLabel" Background="{DynamicResource PanelBackgroundBrush}" Foreground="{DynamicResource AppForegroundBrush}" BorderThickness="0"/>
+                                    </Border>
+                                    <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Hold Ctrl or Shift to pick multiple configs." TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="LicensePageActionModeBorder" Grid.Row="6" Style="{StaticResource PanelCardBorderStyle}" Padding="18" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="What do you want to do?" Style="{StaticResource FormFieldLabelStyle}"/>
+                                    <StackPanel Margin="0,10,0,0">
+                                        <RadioButton x:Name="LicensePageSetPlateRadioButton" Content="Set the same plate text on everything in scope" IsChecked="True" Style="{StaticResource PlateActionRadioStylePage}" Checked="LicensePageModeRadioButton_Checked"/>
+                                        <RadioButton x:Name="LicensePageClearPlateRadioButton" Content="Remove hardcoded plates and return them to dynamic / player choice" Style="{StaticResource PlateActionRadioStylePage}" Checked="LicensePageModeRadioButton_Checked" Margin="0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Plate text" Style="{StaticResource FormFieldLabelStyle}"/>
+                                    <TextBox x:Name="LicensePagePlateTextBox" Margin="0,10,0,0" Height="40" VerticalContentAlignment="Center" MaxLength="10" Background="{DynamicResource InputBackgroundBrush}" Foreground="{DynamicResource InputForegroundBrush}" BorderBrush="{DynamicResource BorderBrush}" TextChanged="LicensePagePlateTextBox_TextChanged"/>
+                                    <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Type the exact plate text to write into each selected .pc file. Leave this field alone when using remove mode." TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="LicensePageSummaryBorder" Grid.Row="8" Style="{StaticResource PanelCardBorderStyle}" Padding="16" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="16"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                <TextBlock Text="Summary" FontSize="20" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Row="1" Margin="0,6,0,14" Foreground="{DynamicResource MutedForegroundBrush}" Text="Double-check the target size before you apply the change." TextWrapping="Wrap"/>
+                                <Border Grid.Row="2" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="16"><TextBlock x:Name="LicensePagePreviewSummaryTextBlock" TextWrapping="Wrap" LineHeight="24"/></Border>
+                                <DataGrid Grid.Row="4" x:Name="LicensePagePreviewDataGrid" Style="{StaticResource PlatePreviewGridStylePage}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" SelectionMode="Single" MinHeight="240">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Mod" Binding="{Binding ModName}" Width="1.25*"/>
+                                        <DataGridTextColumn Header="Config" Binding="{Binding ConfigKey}" Width="1.1*"/>
+                                        <DataGridTextColumn Header="Current plate" Binding="{Binding CurrentPlateDisplay}" Width="1.1*"/>
+                                        <DataGridTextColumn Header="Result" Binding="{Binding ResultPlateDisplay}" Width="1.1*"/>
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.45*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="LicensePageFooterBorder" Grid.Row="10" Style="{StaticResource PanelCardBorderStyle}" Padding="16,12" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="LicensePageFooterStatusTextBlock" VerticalAlignment="Center" Foreground="{DynamicResource MutedForegroundBrush}" Text="Set mode writes the same licenseName text to each selected .pc file." TextWrapping="Wrap" Margin="0,0,20,0"/>
+                                <Button x:Name="LicensePageApplyButton" Grid.Column="1" Width="170" Height="42" Content="Apply" Style="{StaticResource PlateFooterButtonStylePage}" Click="LicensePageApply_Click"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+
+<Border Panel.ZIndex="5" x:Name="LogsPage" Grid.Row="2" Margin="14,14,14,12" Grid.Column="2" Grid.ColumnSpan="3" Padding="18" Style="{StaticResource PanelCardBorderStyle}" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel><TextBlock Text="Logs" FontSize="20" FontWeight="SemiBold"/><TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Keep an eye on status updates and recent activity while scanning or autofilling." TextWrapping="Wrap"/></StackPanel>
+                    <Border Grid.Row="1" Margin="0,18,0,0" Style="{StaticResource PanelCardBorderStyle}" Padding="14"><TextBlock x:Name="LogsSummaryTextBlock" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Text="Operational logs, scan messages, autofill progress, and recent status updates are collected here."/></Border>
+                    <TextBox x:Name="LogsPageTextBox" Grid.Row="2" Margin="0,14,0,0" AcceptsReturn="True" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/>
+                </Grid>
+            </Border>
+
+            <Border Panel.ZIndex="5" x:Name="DataPage" Grid.Row="2" Margin="14,14,14,12" Grid.Column="2" Grid.ColumnSpan="3" Padding="18" Style="{StaticResource PanelCardBorderStyle}" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel><TextBlock Text="Data / JSON" FontSize="20" FontWeight="SemiBold"/><TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="The inference engine now leans on external datasets. This page is the home for validation, reload, and visibility into what is loaded." TextWrapping="Wrap"/></StackPanel>
+                    <UniformGrid Grid.Row="1" Margin="0,18,0,0" Columns="4">
+                        <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Makes" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DataMakesCountTextBlock" Text="0" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+                        <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Profiles" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DataProfilesCountTextBlock" Text="0" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+                        <Border Style="{StaticResource PanelCardBorderStyle}" Margin="0,0,12,0" Padding="16,14"><StackPanel><TextBlock Text="Pricing rules" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DataPricingRulesCountTextBlock" Text="0" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+                        <Border Style="{StaticResource PanelCardBorderStyle}" Padding="16,14"><StackPanel><TextBlock Text="Trim keywords" Foreground="{DynamicResource MutedForegroundBrush}"/><TextBlock x:Name="DataTrimKeywordsCountTextBlock" Text="0" FontSize="24" FontWeight="SemiBold"/></StackPanel></Border>
+                    </UniformGrid>
+                    <Grid Grid.Row="2" Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="1.25*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                            <StackPanel>
+                                <TextBlock Text="Dataset location" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="DataFolderPathTextBlock" Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap"/>
+                                <WrapPanel Margin="0,14,0,0">
+                                    <Button Content="Reload Counts" Padding="16,8" Margin="0,0,10,10" Click="ReloadDataPageButton_Click"/>
+                                    <Button Content="Open Data Folder" Padding="16,8" Margin="0,0,10,10" Click="OpenDataFolderButton_Click"/>
+                                </WrapPanel>
+                                <TextBlock x:Name="DataFilesStatusTextBlock" Margin="0,4,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Style="{StaticResource PanelCardBorderStyle}" Padding="16" Margin="14,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Why this matters" FontWeight="SemiBold"/>
+                                <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" Text="The inference engine depends on these JSON files for brand, model, trim, and pricing logic. If a file is missing or empty, autofill quality drops fast."/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Border Panel.ZIndex="5" x:Name="SettingsPage" Grid.Row="2" Margin="14,14,14,12" Grid.Column="2" Grid.ColumnSpan="3" Padding="18" Style="{StaticResource PanelCardBorderStyle}" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <StackPanel><TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold"/><TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Customize the app shell, startup behavior, and a few core autofill defaults without leaving the workspace." TextWrapping="Wrap"/></StackPanel>
+                        <Grid Grid.Row="1" Margin="0,18,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource PanelCardBorderStyle}" Padding="16" Margin="0,0,14,0">
+                                <StackPanel>
+                                    <TextBlock Text="Application" FontWeight="SemiBold"/>
+                                    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><TextBlock Text="Dark mode" VerticalAlignment="Center"/><mah:ToggleSwitch x:Name="SettingsThemeToggleSwitch" Grid.Column="1" Width="70" Height="30" HorizontalAlignment="Right" Toggled="SettingsThemeToggleSwitch_Toggled"/></Grid>
+                                    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><TextBlock Text="Backup before save" VerticalAlignment="Center"/><mah:ToggleSwitch x:Name="SettingsBackupToggleSwitch" Grid.Column="1" Width="70" Height="30" HorizontalAlignment="Right" Toggled="SettingsBackupToggleSwitch_Toggled"/></Grid>
+                                    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><TextBlock Text="Input into 'Vehicles'" VerticalAlignment="Center"/><mah:ToggleSwitch x:Name="SettingsVehiclesToggleSwitch" Grid.Column="1" Width="70" Height="30" HorizontalAlignment="Right" Toggled="SettingsVehiclesToggleSwitch_Toggled"/></Grid>
+                                    <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="180"/></Grid.ColumnDefinitions><TextBlock Text="Theme palette" VerticalAlignment="Center"/><ComboBox x:Name="SettingsAccentColorComboBox" Grid.Column="1" Width="160" HorizontalAlignment="Right" Margin="0" Style="{StaticResource PresetComboBoxStyle}" SelectionChanged="SettingsAccentColorComboBox_SelectionChanged"><ComboBoxItem Content="Blue" Tag="Blue"/><ComboBoxItem Content="Green" Tag="Green"/><ComboBoxItem Content="Purple" Tag="Purple"/><ComboBoxItem Content="Orange" Tag="Orange"/><ComboBoxItem Content="Red" Tag="Red"/></ComboBox></Grid>
+                                    <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Theme palettes now recolor the highlight accents and the app's blue-tinted chrome/card surfaces so the whole project can shift to a different color family." TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,10,0,0">
+                                        <Border Width="18" Height="18" Margin="0,0,8,0" CornerRadius="9" Background="#6AB8FF" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
+                                        <Border Width="18" Height="18" Margin="0,0,8,0" CornerRadius="9" Background="#62DB8A" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
+                                        <Border Width="18" Height="18" Margin="0,0,8,0" CornerRadius="9" Background="#B490FF" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
+                                        <Border Width="18" Height="18" Margin="0,0,8,0" CornerRadius="9" Background="#FFB25B" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
+                                        <Border Width="18" Height="18" Margin="0,0,8,0" CornerRadius="9" Background="#FF7676" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"/>
+                                        <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource MutedForegroundBrush}" Text="Quick preview of the available accent presets."/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Startup &amp; workflow" FontWeight="SemiBold"/>
+                                    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="180"/></Grid.ColumnDefinitions><TextBlock Text="Default startup page" VerticalAlignment="Center"/><ComboBox x:Name="SettingsStartupPageComboBox" Grid.Column="1" Width="160" HorizontalAlignment="Right" Margin="0" Style="{StaticResource PresetComboBoxStyle}" SelectionChanged="SettingsStartupPageComboBox_SelectionChanged"><ComboBoxItem Content="Dashboard" Tag="Dashboard"/><ComboBoxItem Content="Configuration Editor" Tag="Results"/><ComboBoxItem Content="Review Queue" Tag="ReviewQueue"/><ComboBoxItem Content="Logs" Tag="Logs"/><ComboBoxItem Content="Data / JSON" Tag="Data"/><ComboBoxItem Content="Settings" Tag="Settings"/></ComboBox></Grid>
+                                    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><TextBlock Text="Reopen last mods folder" VerticalAlignment="Center"/><mah:ToggleSwitch x:Name="SettingsReopenLastFolderToggleSwitch" Grid.Column="1" Width="70" Height="30" HorizontalAlignment="Right" Toggled="SettingsReopenLastFolderToggleSwitch_Toggled"/></Grid>
+                                    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><TextBlock Text="Send weak matches to review" VerticalAlignment="Center"/><mah:ToggleSwitch x:Name="SettingsHoldWeakMatchesToggleSwitch" Grid.Column="1" Width="70" Height="30" HorizontalAlignment="Right" Toggled="SettingsHoldWeakMatchesToggleSwitch_Toggled"/></Grid>
+                                    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions><TextBlock Text="Open review queue after auto-fill" VerticalAlignment="Center"/><mah:ToggleSwitch x:Name="SettingsOpenReviewAfterAutoFillToggleSwitch" Grid.Column="1" Width="70" Height="30" HorizontalAlignment="Right" Toggled="SettingsOpenReviewAfterAutoFillToggleSwitch_Toggled"/></Grid>
+                                    <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="180"/></Grid.ColumnDefinitions><TextBlock Text="Lookup timeout (seconds)" VerticalAlignment="Center"/><mah:NumericUpDown x:Name="SettingsLookupTimeoutUpDown" Grid.Column="1" Width="120" HorizontalAlignment="Right" Minimum="3" Maximum="30" Interval="1" ValueChanged="SettingsLookupTimeoutUpDown_ValueChanged"/></Grid>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <Grid Grid.Row="2" Margin="0,18,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="1.15*"/><ColumnDefinition Width="1*"/></Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                                <StackPanel>
+                                    <TextBlock Text="Current workspace settings" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="SettingsCurrentFolderTextBlock" Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="SettingsReviewSummaryTextBlock" Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="SettingsDataSummaryTextBlock" Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Style="{StaticResource PanelCardBorderStyle}" Padding="16" Margin="14,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Auto-fill presets" FontWeight="SemiBold"/>
+                                    <TextBlock Margin="0,8,0,14" Foreground="{DynamicResource MutedForegroundBrush}" Text="Detailed field-level defaults still live in the dedicated Auto-fill Settings popup. These new page settings control startup, review behavior, timeout, and appearance." TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button x:Name="OpenAutoFillSettingsFromPageButton" Content="Open Auto-fill Settings" Width="180" Click="OpenAutoFillSettingsFromPage_Click"/>
+                                        <Button x:Name="ResetSettingsDefaultsButton" Content="Reset page defaults" Width="160" Margin="10,0,0,0" Click="ResetSettingsDefaultsButton_Click"/>
+                                    </StackPanel>
+                                    <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Reset page defaults puts startup, accent, timeout, and review-flow preferences back to the project defaults." TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+
+        <Border Grid.Row="3" Margin="14,0,14,14" Padding="14,8" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Status &amp; activity" FontWeight="SemiBold" FontSize="13"/>
+                    <ProgressBar x:Name="AutoFillProgressBar" Height="12" Margin="0,10,0,0" Minimum="0" Maximum="100" Visibility="Collapsed" IsIndeterminate="False"/>
+                    <TextBlock x:Name="StatusTextBlock" Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}"/>
+                    <TextBlock x:Name="StatusDetailTextBlock" Margin="0,4,0,0" Foreground="{DynamicResource MutedForegroundBrush}" TextWrapping="Wrap" FontSize="11"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="10,5" Margin="10,0,0,0">
+                        <TextBlock x:Name="FooterWorkspacePageTextBlock" Text="Page: Configuration Editor" FontWeight="SemiBold" FontSize="11"/>
+                    </Border>
+                    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Padding="10,5" Margin="10,0,0,0">
+                        <TextBlock x:Name="FooterRepoStateTextBlock" Text="Repo not loaded" FontWeight="SemiBold" FontSize="11"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
         </Border>
+
+        <Border x:Name="AutoFillOverlay"
+                Grid.RowSpan="4"
+                Panel.ZIndex="500"
+                Background="#B3141722"
+                Visibility="Collapsed">
+            <Grid>
+                <Border Width="560"
+                        MaxWidth="560"
+                        Padding="22"
+                        CornerRadius="18"
+                        Background="{DynamicResource CardBackgroundBrush}"
+                        BorderBrush="{DynamicResource AccentBorderBrush}"
+                        BorderThickness="1.2"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Effect="{DynamicResource CardShadowEffect}">
+                    <StackPanel>
+                        <TextBlock Text="Operation in progress"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
+                                   TextWrapping="Wrap"
+                                   Text="Autofill is running. Please wait until it finishes, or cancel the run."/>
+                        <ProgressBar x:Name="AutoFillOverlayProgressBar"
+                                     Height="16"
+                                     Margin="0,18,0,0"
+                                     Minimum="0"
+                                     Maximum="100"
+                                     IsIndeterminate="False"/>
+                        <TextBlock x:Name="AutoFillOverlayStatusTextBlock"
+                                   Margin="0,12,0,0"
+                                   FontWeight="SemiBold"
+                                   Text="Preparing auto-fill run..."/>
+                        <TextBlock x:Name="AutoFillOverlayDetailTextBlock"
+                                   Margin="0,6,0,0"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
+                                   TextWrapping="Wrap"
+                                   Text="Please wait while configs are processed."/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                            <Button x:Name="AutoFillOverlayCancelButton"
+                                    Content="Cancel run"
+                                    MinWidth="116"
+                                    Height="34"
+                                    Click="CancelAutoFillAll_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
     </Grid>
 </mah:MetroWindow>
 

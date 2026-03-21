@@ -1,0 +1,1741 @@
+{
+  "makes": [
+    {
+      "brand": "Abarth",
+      "country": "Italy",
+      "tier": "mainstream",
+      "aliases": [
+        "abarth"
+      ]
+    },
+    {
+      "brand": "Acura",
+      "country": "Japan",
+      "tier": "premium",
+      "aliases": [
+        "acura"
+      ]
+    },
+    {
+      "brand": "Aion",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "aion",
+        "gac aion"
+      ]
+    },
+    {
+      "brand": "Aiways",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "aiways"
+      ]
+    },
+    {
+      "brand": "Aixam",
+      "country": "France",
+      "tier": "economy",
+      "aliases": [
+        "aixam"
+      ]
+    },
+    {
+      "brand": "Alfa Romeo",
+      "country": "Italy",
+      "tier": "premium",
+      "aliases": [
+        "alfa romeo",
+        "alfa",
+        "alfaromeo"
+      ]
+    },
+    {
+      "brand": "Alpina",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "alpina"
+      ]
+    },
+    {
+      "brand": "Alpine",
+      "country": "France",
+      "tier": "premium",
+      "aliases": [
+        "alpine"
+      ]
+    },
+    {
+      "brand": "AMC",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "amc"
+      ]
+    },
+    {
+      "brand": "Aptera",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "aptera"
+      ]
+    },
+    {
+      "brand": "Ariel",
+      "country": "United Kingdom",
+      "tier": "exotic",
+      "aliases": [
+        "ariel"
+      ]
+    },
+    {
+      "brand": "Arrinera",
+      "country": "Poland",
+      "tier": "exotic",
+      "aliases": [
+        "arrinera"
+      ]
+    },
+    {
+      "brand": "Artega",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "artega"
+      ]
+    },
+    {
+      "brand": "Ascari",
+      "country": "United Kingdom",
+      "tier": "exotic",
+      "aliases": [
+        "ascari"
+      ]
+    },
+    {
+      "brand": "Aston Martin",
+      "country": "United Kingdom",
+      "tier": "luxury",
+      "aliases": [
+        "aston martin",
+        "aston",
+        "astonmartin"
+      ]
+    },
+    {
+      "brand": "Audi",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "audi"
+      ]
+    },
+    {
+      "brand": "Austin",
+      "country": "United Kingdom",
+      "tier": "mainstream",
+      "aliases": [
+        "austin"
+      ]
+    },
+    {
+      "brand": "Autobello",
+      "country": "Italy",
+      "tier": "economy",
+      "aliases": [
+        "autobello"
+      ]
+    },
+    {
+      "brand": "Autobianchi",
+      "country": "Italy",
+      "tier": "economy",
+      "aliases": [
+        "autobianchi",
+        "auto bianchi"
+      ]
+    },
+    {
+      "brand": "Autozam",
+      "country": "Japan",
+      "tier": "economy",
+      "aliases": [
+        "autozam"
+      ]
+    },
+    {
+      "brand": "Avatr",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "avatr"
+      ]
+    },
+    {
+      "brand": "BAC",
+      "country": "United Kingdom",
+      "tier": "exotic",
+      "aliases": [
+        "bac"
+      ]
+    },
+    {
+      "brand": "BAIC",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "baic",
+        "beijing auto"
+      ]
+    },
+    {
+      "brand": "Baojun",
+      "country": "China",
+      "tier": "economy",
+      "aliases": [
+        "baojun"
+      ]
+    },
+    {
+      "brand": "Barkas",
+      "country": "Germany",
+      "tier": "economy",
+      "aliases": [
+        "barkas"
+      ]
+    },
+    {
+      "brand": "Bentley",
+      "country": "United Kingdom",
+      "tier": "luxury",
+      "aliases": [
+        "bentley"
+      ]
+    },
+    {
+      "brand": "Bestune",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "bestune",
+        "besturn"
+      ]
+    },
+    {
+      "brand": "BMW",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "bmw",
+        "bimmer"
+      ]
+    },
+    {
+      "brand": "Borgward",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "borgward"
+      ]
+    },
+    {
+      "brand": "Brilliance",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "brilliance"
+      ]
+    },
+    {
+      "brand": "Bristol",
+      "country": "United Kingdom",
+      "tier": "luxury",
+      "aliases": [
+        "bristol",
+        "bristol cars"
+      ]
+    },
+    {
+      "brand": "Bruckell",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "bruckell"
+      ]
+    },
+    {
+      "brand": "Bugatti",
+      "country": "France",
+      "tier": "exotic",
+      "aliases": [
+        "bugatti"
+      ]
+    },
+    {
+      "brand": "Buick",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "buick"
+      ]
+    },
+    {
+      "brand": "Burnside",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "burnside",
+        "burnside special"
+      ]
+    },
+    {
+      "brand": "BYD",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "byd",
+        "build your dreams"
+      ]
+    },
+    {
+      "brand": "Cadillac",
+      "country": "United States",
+      "tier": "luxury",
+      "aliases": [
+        "cadillac"
+      ]
+    },
+    {
+      "brand": "Caterham",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "caterham",
+        "caterham cars"
+      ]
+    },
+    {
+      "brand": "Changan",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "changan",
+        "changan auto"
+      ]
+    },
+    {
+      "brand": "Cherrier",
+      "country": "France",
+      "tier": "mainstream",
+      "aliases": [
+        "cherrier"
+      ]
+    },
+    {
+      "brand": "Chery",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "chery"
+      ]
+    },
+    {
+      "brand": "Chevrolet",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "chevrolet",
+        "chevy"
+      ]
+    },
+    {
+      "brand": "Chrysler",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "chrysler"
+      ]
+    },
+    {
+      "brand": "Citroën",
+      "country": "France",
+      "tier": "mainstream",
+      "aliases": [
+        "citroen",
+        "citroën"
+      ]
+    },
+    {
+      "brand": "Civetta",
+      "country": "Italy",
+      "tier": "exotic",
+      "aliases": [
+        "civetta"
+      ]
+    },
+    {
+      "brand": "Cupra",
+      "country": "Spain",
+      "tier": "premium",
+      "aliases": [
+        "cupra"
+      ]
+    },
+    {
+      "brand": "Dacia",
+      "country": "Romania",
+      "tier": "economy",
+      "aliases": [
+        "dacia"
+      ]
+    },
+    {
+      "brand": "Daewoo",
+      "country": "South Korea",
+      "tier": "economy",
+      "aliases": [
+        "daewoo"
+      ]
+    },
+    {
+      "brand": "Daihatsu",
+      "country": "Japan",
+      "tier": "economy",
+      "aliases": [
+        "daihatsu"
+      ]
+    },
+    {
+      "brand": "Dallara",
+      "country": "Italy",
+      "tier": "exotic",
+      "aliases": [
+        "dallara"
+      ]
+    },
+    {
+      "brand": "De Tomaso",
+      "country": "Italy",
+      "tier": "exotic",
+      "aliases": [
+        "de tomaso",
+        "detomaso",
+        "de tomaso automobili"
+      ]
+    },
+    {
+      "brand": "DeLorean",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "delorean",
+        "de lorean"
+      ]
+    },
+    {
+      "brand": "Denza",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "denza"
+      ]
+    },
+    {
+      "brand": "Dodge",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "dodge"
+      ]
+    },
+    {
+      "brand": "Dongfeng",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "dongfeng",
+        "dfsk"
+      ]
+    },
+    {
+      "brand": "Donkervoort",
+      "country": "Netherlands",
+      "tier": "exotic",
+      "aliases": [
+        "donkervoort"
+      ]
+    },
+    {
+      "brand": "DS Automobiles",
+      "country": "France",
+      "tier": "premium",
+      "aliases": [
+        "ds automobiles"
+      ]
+    },
+    {
+      "brand": "Eagle",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "eagle"
+      ]
+    },
+    {
+      "brand": "Elfin",
+      "country": "Australia",
+      "tier": "premium",
+      "aliases": [
+        "elfin",
+        "elfin sports cars"
+      ]
+    },
+    {
+      "brand": "ETK",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "etk",
+        "e t k"
+      ]
+    },
+    {
+      "brand": "Eunos",
+      "country": "Japan",
+      "tier": "premium",
+      "aliases": [
+        "eunos"
+      ]
+    },
+    {
+      "brand": "Exeed",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "exeed"
+      ]
+    },
+    {
+      "brand": "Facel Vega",
+      "country": "France",
+      "tier": "luxury",
+      "aliases": [
+        "facel vega",
+        "facelvega"
+      ]
+    },
+    {
+      "brand": "Faraday Future",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "faraday future"
+      ]
+    },
+    {
+      "brand": "FAW",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "faw",
+        "first auto works"
+      ]
+    },
+    {
+      "brand": "Ferrari",
+      "country": "Italy",
+      "tier": "exotic",
+      "aliases": [
+        "ferrari"
+      ]
+    },
+    {
+      "brand": "Fiat",
+      "country": "Italy",
+      "tier": "economy",
+      "aliases": [
+        "fiat"
+      ]
+    },
+    {
+      "brand": "Fisker",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "fisker"
+      ]
+    },
+    {
+      "brand": "Ford",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "ford"
+      ]
+    },
+    {
+      "brand": "Foton",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "foton"
+      ]
+    },
+    {
+      "brand": "FPV",
+      "country": "Australia",
+      "tier": "premium",
+      "aliases": [
+        "fpv",
+        "ford performance vehicles"
+      ]
+    },
+    {
+      "brand": "FSO",
+      "country": "Poland",
+      "tier": "economy",
+      "aliases": [
+        "fso"
+      ]
+    },
+    {
+      "brand": "GAC",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "gac"
+      ]
+    },
+    {
+      "brand": "Gavril",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "gavril"
+      ]
+    },
+    {
+      "brand": "GAZ",
+      "country": "Russia",
+      "tier": "mainstream",
+      "aliases": [
+        "gaz",
+        "gaz group"
+      ]
+    },
+    {
+      "brand": "Geely",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "geely",
+        "geely auto"
+      ]
+    },
+    {
+      "brand": "Genesis",
+      "country": "South Korea",
+      "tier": "luxury",
+      "aliases": [
+        "genesis"
+      ]
+    },
+    {
+      "brand": "Geo",
+      "country": "United States",
+      "tier": "economy",
+      "aliases": [
+        "geo"
+      ]
+    },
+    {
+      "brand": "Ginetta",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "ginetta"
+      ]
+    },
+    {
+      "brand": "GMC",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "gmc",
+        "g m c"
+      ]
+    },
+    {
+      "brand": "Great Wall",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "great wall",
+        "gwm"
+      ]
+    },
+    {
+      "brand": "Gumpert",
+      "country": "Germany",
+      "tier": "exotic",
+      "aliases": [
+        "gumpert"
+      ]
+    },
+    {
+      "brand": "Haval",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "haval"
+      ]
+    },
+    {
+      "brand": "Hino",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "hino"
+      ]
+    },
+    {
+      "brand": "Hirochi",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "hirochi"
+      ]
+    },
+    {
+      "brand": "Holden",
+      "country": "Australia",
+      "tier": "mainstream",
+      "aliases": [
+        "holden"
+      ]
+    },
+    {
+      "brand": "Honda",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "honda"
+      ]
+    },
+    {
+      "brand": "Hongqi",
+      "country": "China",
+      "tier": "luxury",
+      "aliases": [
+        "hongqi",
+        "red flag"
+      ]
+    },
+    {
+      "brand": "HSV",
+      "country": "Australia",
+      "tier": "premium",
+      "aliases": [
+        "hsv",
+        "holden special vehicles"
+      ]
+    },
+    {
+      "brand": "Hudson",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "hudson"
+      ]
+    },
+    {
+      "brand": "Hummer",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "hummer"
+      ]
+    },
+    {
+      "brand": "Hyundai",
+      "country": "South Korea",
+      "tier": "mainstream",
+      "aliases": [
+        "hyundai"
+      ]
+    },
+    {
+      "brand": "Ibishu",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "ibishu",
+        "ibisu"
+      ]
+    },
+    {
+      "brand": "Imperial",
+      "country": "United States",
+      "tier": "luxury",
+      "aliases": [
+        "imperial"
+      ]
+    },
+    {
+      "brand": "Ineos",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "ineos"
+      ]
+    },
+    {
+      "brand": "Infiniti",
+      "country": "Japan",
+      "tier": "premium",
+      "aliases": [
+        "infiniti"
+      ]
+    },
+    {
+      "brand": "Isuzu",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "isuzu"
+      ]
+    },
+    {
+      "brand": "JAC",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "jac",
+        "jianghuai"
+      ]
+    },
+    {
+      "brand": "Jaguar",
+      "country": "United Kingdom",
+      "tier": "luxury",
+      "aliases": [
+        "jaguar"
+      ]
+    },
+    {
+      "brand": "Jeep",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "jeep"
+      ]
+    },
+    {
+      "brand": "Jensen",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "jensen"
+      ]
+    },
+    {
+      "brand": "Jetour",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "jetour"
+      ]
+    },
+    {
+      "brand": "Kia",
+      "country": "South Korea",
+      "tier": "mainstream",
+      "aliases": [
+        "kia"
+      ]
+    },
+    {
+      "brand": "Koenigsegg",
+      "country": "Sweden",
+      "tier": "exotic",
+      "aliases": [
+        "koenigsegg"
+      ]
+    },
+    {
+      "brand": "Lada",
+      "country": "Russia",
+      "tier": "economy",
+      "aliases": [
+        "lada"
+      ]
+    },
+    {
+      "brand": "Lamborghini",
+      "country": "Italy",
+      "tier": "exotic",
+      "aliases": [
+        "lamborghini",
+        "lambo"
+      ]
+    },
+    {
+      "brand": "Lancia",
+      "country": "Italy",
+      "tier": "premium",
+      "aliases": [
+        "lancia"
+      ]
+    },
+    {
+      "brand": "Land Rover",
+      "country": "United Kingdom",
+      "tier": "luxury",
+      "aliases": [
+        "land rover",
+        "landrover"
+      ]
+    },
+    {
+      "brand": "Leapmotor",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "leapmotor"
+      ]
+    },
+    {
+      "brand": "Lexus",
+      "country": "Japan",
+      "tier": "premium",
+      "aliases": [
+        "lexus"
+      ]
+    },
+    {
+      "brand": "Li Auto",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "li auto",
+        "lixiang"
+      ]
+    },
+    {
+      "brand": "Lifan",
+      "country": "China",
+      "tier": "economy",
+      "aliases": [
+        "lifan"
+      ]
+    },
+    {
+      "brand": "Ligier",
+      "country": "France",
+      "tier": "economy",
+      "aliases": [
+        "ligier"
+      ]
+    },
+    {
+      "brand": "Lincoln",
+      "country": "United States",
+      "tier": "luxury",
+      "aliases": [
+        "lincoln"
+      ]
+    },
+    {
+      "brand": "Lotus",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "lotus",
+        "lotus cars"
+      ]
+    },
+    {
+      "brand": "Lucid",
+      "country": "United States",
+      "tier": "luxury",
+      "aliases": [
+        "lucid"
+      ]
+    },
+    {
+      "brand": "Lynk & Co",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "lynk & co",
+        "lynk and co",
+        "lynkco"
+      ]
+    },
+    {
+      "brand": "Mahindra",
+      "country": "India",
+      "tier": "mainstream",
+      "aliases": [
+        "mahindra",
+        "mahindra auto"
+      ]
+    },
+    {
+      "brand": "Marcos",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "marcos",
+        "marcos engineering"
+      ]
+    },
+    {
+      "brand": "Maruti Suzuki",
+      "country": "India",
+      "tier": "economy",
+      "aliases": [
+        "maruti suzuki",
+        "maruti",
+        "maruti-suzuki"
+      ]
+    },
+    {
+      "brand": "Maserati",
+      "country": "Italy",
+      "tier": "luxury",
+      "aliases": [
+        "maserati",
+        "maseratti"
+      ]
+    },
+    {
+      "brand": "Matra",
+      "country": "France",
+      "tier": "premium",
+      "aliases": [
+        "matra"
+      ]
+    },
+    {
+      "brand": "Maxus",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "maxus"
+      ]
+    },
+    {
+      "brand": "Maybach",
+      "country": "Germany",
+      "tier": "luxury",
+      "aliases": [
+        "maybach"
+      ]
+    },
+    {
+      "brand": "Mazda",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "mazda"
+      ]
+    },
+    {
+      "brand": "McLaren",
+      "country": "United Kingdom",
+      "tier": "exotic",
+      "aliases": [
+        "mclaren",
+        "mc laren"
+      ]
+    },
+    {
+      "brand": "Mercedes-Benz",
+      "country": "Germany",
+      "tier": "luxury",
+      "aliases": [
+        "mercedes",
+        "mercedes-benz",
+        "benz",
+        "mercedes benz"
+      ]
+    },
+    {
+      "brand": "Mercury",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "mercury"
+      ]
+    },
+    {
+      "brand": "MG",
+      "country": "United Kingdom",
+      "tier": "mainstream",
+      "aliases": [
+        "mg",
+        "m g",
+        "morris garages"
+      ]
+    },
+    {
+      "brand": "MINI",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "mini"
+      ]
+    },
+    {
+      "brand": "Mitsubishi",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "mitsubishi"
+      ]
+    },
+    {
+      "brand": "Mitsuoka",
+      "country": "Japan",
+      "tier": "premium",
+      "aliases": [
+        "mitsuoka"
+      ]
+    },
+    {
+      "brand": "Morgan",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "morgan"
+      ]
+    },
+    {
+      "brand": "Morris",
+      "country": "United Kingdom",
+      "tier": "mainstream",
+      "aliases": [
+        "morris"
+      ]
+    },
+    {
+      "brand": "Moskvitch",
+      "country": "Russia",
+      "tier": "economy",
+      "aliases": [
+        "moskvitch",
+        "moskvich"
+      ]
+    },
+    {
+      "brand": "NIO",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "nio"
+      ]
+    },
+    {
+      "brand": "Nissan",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "nissan"
+      ]
+    },
+    {
+      "brand": "Noble",
+      "country": "United Kingdom",
+      "tier": "exotic",
+      "aliases": [
+        "noble"
+      ]
+    },
+    {
+      "brand": "Oldsmobile",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "oldsmobile"
+      ]
+    },
+    {
+      "brand": "Omoda",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "omoda"
+      ]
+    },
+    {
+      "brand": "Opel",
+      "country": "Germany",
+      "tier": "mainstream",
+      "aliases": [
+        "opel"
+      ]
+    },
+    {
+      "brand": "ORA",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "ora"
+      ]
+    },
+    {
+      "brand": "Packard",
+      "country": "United States",
+      "tier": "luxury",
+      "aliases": [
+        "packard"
+      ]
+    },
+    {
+      "brand": "Pagani",
+      "country": "Italy",
+      "tier": "exotic",
+      "aliases": [
+        "pagani"
+      ]
+    },
+    {
+      "brand": "Panoz",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "panoz"
+      ]
+    },
+    {
+      "brand": "Perodua",
+      "country": "Malaysia",
+      "tier": "economy",
+      "aliases": [
+        "perodua"
+      ]
+    },
+    {
+      "brand": "Peugeot",
+      "country": "France",
+      "tier": "mainstream",
+      "aliases": [
+        "peugeot"
+      ]
+    },
+    {
+      "brand": "Pininfarina",
+      "country": "Italy",
+      "tier": "luxury",
+      "aliases": [
+        "pininfarina",
+        "automobili pininfarina"
+      ]
+    },
+    {
+      "brand": "Plymouth",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "plymouth"
+      ]
+    },
+    {
+      "brand": "Polestar",
+      "country": "Sweden",
+      "tier": "premium",
+      "aliases": [
+        "polestar"
+      ]
+    },
+    {
+      "brand": "Pontiac",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "pontiac"
+      ]
+    },
+    {
+      "brand": "Porsche",
+      "country": "Germany",
+      "tier": "luxury",
+      "aliases": [
+        "porsche",
+        "porshe"
+      ]
+    },
+    {
+      "brand": "Proton",
+      "country": "Malaysia",
+      "tier": "economy",
+      "aliases": [
+        "proton",
+        "proton cars"
+      ]
+    },
+    {
+      "brand": "Qoros",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "qoros",
+        "qoros auto"
+      ]
+    },
+    {
+      "brand": "Radical",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "radical"
+      ]
+    },
+    {
+      "brand": "Ram",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "ram"
+      ]
+    },
+    {
+      "brand": "Renault",
+      "country": "France",
+      "tier": "mainstream",
+      "aliases": [
+        "renault"
+      ]
+    },
+    {
+      "brand": "Rezvani",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "rezvani"
+      ]
+    },
+    {
+      "brand": "Rimac",
+      "country": "Croatia",
+      "tier": "exotic",
+      "aliases": [
+        "rimac"
+      ]
+    },
+    {
+      "brand": "Rivian",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "rivian"
+      ]
+    },
+    {
+      "brand": "Roewe",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "roewe"
+      ]
+    },
+    {
+      "brand": "Rolls-Royce",
+      "country": "United Kingdom",
+      "tier": "luxury",
+      "aliases": [
+        "rolls-royce",
+        "rolls royce",
+        "rollsroyce"
+      ]
+    },
+    {
+      "brand": "Rover",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "rover",
+        "rover cars"
+      ]
+    },
+    {
+      "brand": "Ruf",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "ruf"
+      ]
+    },
+    {
+      "brand": "Saab",
+      "country": "Sweden",
+      "tier": "premium",
+      "aliases": [
+        "saab"
+      ]
+    },
+    {
+      "brand": "Saleen",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "saleen"
+      ]
+    },
+    {
+      "brand": "Saturn",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "saturn"
+      ]
+    },
+    {
+      "brand": "Scania",
+      "country": "Sweden",
+      "tier": "mainstream",
+      "aliases": [
+        "scania"
+      ]
+    },
+    {
+      "brand": "SCG",
+      "country": "United States",
+      "tier": "exotic",
+      "aliases": [
+        "scg",
+        "scuderia cameron glickenhaus"
+      ]
+    },
+    {
+      "brand": "Scion",
+      "country": "Japan",
+      "tier": "economy",
+      "aliases": [
+        "scion"
+      ]
+    },
+    {
+      "brand": "SEAT",
+      "country": "Spain",
+      "tier": "mainstream",
+      "aliases": [
+        "seat"
+      ]
+    },
+    {
+      "brand": "Shelby",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "shelby"
+      ]
+    },
+    {
+      "brand": "Simca",
+      "country": "France",
+      "tier": "mainstream",
+      "aliases": [
+        "simca"
+      ]
+    },
+    {
+      "brand": "Smart",
+      "country": "Germany",
+      "tier": "economy",
+      "aliases": [
+        "smart"
+      ]
+    },
+    {
+      "brand": "Soliad",
+      "country": "United States",
+      "tier": "mainstream",
+      "aliases": [
+        "soliad"
+      ]
+    },
+    {
+      "brand": "Soueast",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "soueast"
+      ]
+    },
+    {
+      "brand": "Spyker",
+      "country": "Netherlands",
+      "tier": "exotic",
+      "aliases": [
+        "spyker"
+      ]
+    },
+    {
+      "brand": "SsangYong",
+      "country": "South Korea",
+      "tier": "mainstream",
+      "aliases": [
+        "ssangyong",
+        "ssang yong"
+      ]
+    },
+    {
+      "brand": "Subaru",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "subaru",
+        "subie"
+      ]
+    },
+    {
+      "brand": "Suzuki",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "suzuki"
+      ]
+    },
+    {
+      "brand": "Talbot",
+      "country": "France",
+      "tier": "mainstream",
+      "aliases": [
+        "talbot"
+      ]
+    },
+    {
+      "brand": "TANK",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "tank"
+      ]
+    },
+    {
+      "brand": "Tata",
+      "country": "India",
+      "tier": "mainstream",
+      "aliases": [
+        "tata"
+      ]
+    },
+    {
+      "brand": "Tatra",
+      "country": "Czech Republic",
+      "tier": "mainstream",
+      "aliases": [
+        "tatra"
+      ]
+    },
+    {
+      "brand": "Tesla",
+      "country": "United States",
+      "tier": "premium",
+      "aliases": [
+        "tesla"
+      ]
+    },
+    {
+      "brand": "Toyota",
+      "country": "Japan",
+      "tier": "mainstream",
+      "aliases": [
+        "toyota"
+      ]
+    },
+    {
+      "brand": "Trabant",
+      "country": "Germany",
+      "tier": "economy",
+      "aliases": [
+        "trabant",
+        "trabi"
+      ]
+    },
+    {
+      "brand": "Triumph",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "triumph",
+        "triumph cars"
+      ]
+    },
+    {
+      "brand": "TVR",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "tvr",
+        "t v r"
+      ]
+    },
+    {
+      "brand": "UAZ",
+      "country": "Russia",
+      "tier": "mainstream",
+      "aliases": [
+        "uaz"
+      ]
+    },
+    {
+      "brand": "Vanden Plas",
+      "country": "United Kingdom",
+      "tier": "luxury",
+      "aliases": [
+        "vanden plas",
+        "vandenplas"
+      ]
+    },
+    {
+      "brand": "Vauxhall",
+      "country": "United Kingdom",
+      "tier": "mainstream",
+      "aliases": [
+        "vauxhall"
+      ]
+    },
+    {
+      "brand": "Venturi",
+      "country": "Monaco",
+      "tier": "premium",
+      "aliases": [
+        "venturi"
+      ]
+    },
+    {
+      "brand": "VinFast",
+      "country": "Vietnam",
+      "tier": "mainstream",
+      "aliases": [
+        "vinfast",
+        "vin fast"
+      ]
+    },
+    {
+      "brand": "Volkswagen",
+      "country": "Germany",
+      "tier": "mainstream",
+      "aliases": [
+        "volkswagen",
+        "vw",
+        "volks wagon"
+      ]
+    },
+    {
+      "brand": "Volvo",
+      "country": "Sweden",
+      "tier": "premium",
+      "aliases": [
+        "volvo",
+        "volvo cars"
+      ]
+    },
+    {
+      "brand": "Voyah",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "voyah"
+      ]
+    },
+    {
+      "brand": "Wartburg",
+      "country": "Germany",
+      "tier": "economy",
+      "aliases": [
+        "wartburg"
+      ]
+    },
+    {
+      "brand": "Westfield",
+      "country": "United Kingdom",
+      "tier": "premium",
+      "aliases": [
+        "westfield"
+      ]
+    },
+    {
+      "brand": "Wey",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "wey"
+      ]
+    },
+    {
+      "brand": "Wiesmann",
+      "country": "Germany",
+      "tier": "premium",
+      "aliases": [
+        "wiesmann",
+        "wiesmann manufaktur"
+      ]
+    },
+    {
+      "brand": "Wuling",
+      "country": "China",
+      "tier": "economy",
+      "aliases": [
+        "wuling"
+      ]
+    },
+    {
+      "brand": "XPeng",
+      "country": "China",
+      "tier": "mainstream",
+      "aliases": [
+        "xpeng",
+        "xiaopeng"
+      ]
+    },
+    {
+      "brand": "Yugo",
+      "country": "Serbia",
+      "tier": "economy",
+      "aliases": [
+        "yugo"
+      ]
+    },
+    {
+      "brand": "Zastava",
+      "country": "Serbia",
+      "tier": "economy",
+      "aliases": [
+        "zastava"
+      ]
+    },
+    {
+      "brand": "Zeekr",
+      "country": "China",
+      "tier": "premium",
+      "aliases": [
+        "zeekr"
+      ]
+    },
+    {
+      "brand": "Zotye",
+      "country": "China",
+      "tier": "economy",
+      "aliases": [
+        "zotye"
+      ]
+    },
+    {
+      "brand": "Škoda",
+      "country": "Czech Republic",
+      "tier": "mainstream",
+      "aliases": [
+        "skoda",
+        "škoda",
+        "škoda auto"
+      ]
+    }
+  ]
+}

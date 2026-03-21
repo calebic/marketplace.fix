@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -18,6 +18,7 @@ using System.Windows.Input;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media.Animation;
 using System.Windows.Media;
+using System.Text.RegularExpressions;
 using ControlzEx.Theming;
 using MahApps.Metro.Controls;
 using Brush = System.Windows.Media.Brush;
@@ -25,11 +26,101 @@ using WpfApplication = System.Windows.Application;
 using WpfControl = System.Windows.Controls.Control;
 using WpfTextBox = System.Windows.Controls.TextBox;
 using WinForms = System.Windows.Forms;
+using System.Windows.Threading;
 
 namespace WpfApp1;
 
+
+public sealed class SummaryCountItem
+{
+    public string Label { get; init; } = string.Empty;
+    public int Count { get; init; }
+    public IReadOnlyList<BrandSourceItem> Sources { get; init; } = Array.Empty<BrandSourceItem>();
+}
+
+public sealed class BrandSourceItem
+{
+    public string DisplayName { get; init; } = string.Empty;
+    public string SourcePath { get; init; } = string.Empty;
+    public int ConfigCount { get; init; }
+    public int ReviewCount { get; init; }
+}
+
+public sealed class ModLibraryItem
+{
+    public string Label { get; init; } = string.Empty;
+    public int Count { get; init; }
+    public int ReviewCount { get; init; }
+    public string Category { get; init; } = string.Empty;
+}
+
 public partial class MainWindow : MetroWindow
 {
+    private sealed class PendingConfigWrite
+    {
+        public required VehicleConfigItem Item { get; init; }
+        public required string Json { get; init; }
+    }
+
+    private sealed class ZipScanContext
+    {
+        private readonly Dictionary<string, ZipArchiveEntry> _entries;
+        private readonly Dictionary<string, JsonNode?> _parsedJsonCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string?> _licensePlateCache = new(StringComparer.OrdinalIgnoreCase);
+
+        public ZipScanContext(ZipArchive archive)
+        {
+            _entries = archive.Entries
+                .Where(e => !string.IsNullOrWhiteSpace(e.FullName))
+                .GroupBy(e => NormalizeArchivePath(e.FullName), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public IEnumerable<ZipArchiveEntry> Entries => _entries.Values;
+
+        public bool Contains(string path) => _entries.ContainsKey(NormalizeArchivePath(path));
+
+        public string? ReadText(string path)
+        {
+            if (!_entries.TryGetValue(NormalizeArchivePath(path), out var entry))
+            {
+                return null;
+            }
+
+            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+
+        public JsonNode? ReadJson(string path)
+        {
+            var normalized = NormalizeArchivePath(path);
+            if (_parsedJsonCache.TryGetValue(normalized, out var cached))
+            {
+                return cached;
+            }
+
+            var parsed = ParseJson(ReadText(path) ?? string.Empty);
+            _parsedJsonCache[normalized] = parsed;
+            return parsed;
+        }
+
+        public string? ReadLicensePlate(string path)
+        {
+            var normalized = NormalizeArchivePath(path);
+            if (_licensePlateCache.TryGetValue(normalized, out var cached))
+            {
+                return cached;
+            }
+
+            var jsonText = ReadText(path);
+            var value = jsonText == null ? null : ReadString(ParseJson(jsonText), "licenseName");
+            _licensePlateCache[normalized] = value;
+            return value;
+        }
+
+        private static string NormalizeArchivePath(string path) => path.Replace('\\', '/').TrimStart('/');
+    }
+
     private const string DefaultModsPath = @"D:\beamng progress\30\current\mods";
     private const string DefaultRegion = "northAmerica";
     private const string DefaultInsuranceClass = "dailyDriver";
@@ -42,34 +133,96 @@ public partial class MainWindow : MetroWindow
     private VehicleConfigItem? _selected;
     private ICollectionView? _configsView;
     private readonly AutoFillSettings _autoFillSettings = AutoFillSettings.CreateDefaults();
+    private readonly VehicleInferenceService _inferenceService;
     private bool _hasUnsavedChanges;
     private bool _isLoadingForm;
     private bool _isScanning;
     private bool _suppressSettingsSave;
+    private bool _isAutoFillAllRunning;
+    private string _accentColorName = "Blue";
+    private string _defaultStartupPage = "Dashboard";
+    private bool _reopenLastModsFolderOnStartup = true;
+    private bool _holdWeakMatchesForReview = true;
+    private bool _openReviewQueueAfterAutoFill = false;
+    private int _lookupTimeoutSeconds = 8;
     private CancellationTokenSource? _scanCts;
-    private CancellationTokenSource? _searchCts;
+    private readonly DispatcherTimer _searchRefreshTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
+    private CancellationTokenSource? _autoFillAllCts;
+    private static readonly string ScrapeLogPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamNGMarketplaceConfigEditor", "scrape.log");
 
     public ObservableCollection<VehicleConfigItem> Configs { get; } = new();
+    public ObservableCollection<VehicleConfigItem> FlaggedConfigs { get; } = new();
+    public ObservableCollection<SummaryCountItem> DashboardBrandStats { get; } = new();
+    public ObservableCollection<ModLibraryItem> ModLibraryItems { get; } = new();
+
+    private string _currentWorkspacePage = "Results";
+    private bool _isLeftNavCollapsed;
+    private readonly GridLength _expandedLeftNavWidth = new(160, GridUnitType.Pixel);
+    private readonly GridLength _expandedLeftNavSpacerWidth = new(8, GridUnitType.Pixel);
+    private DateTime _lastAutoFillUiProgressUpdateUtc = DateTime.MinValue;
+    private readonly object _autoFillUiProgressGate = new();
+    private const int AutoFillUiProgressIntervalMs = 650;
+    private readonly ObservableCollection<PlatePreviewItem> _licensePagePreviewItems = new();
+    private readonly List<PlateModChoiceItem> _licensePageModChoices = new();
+    private readonly List<PlateConfigChoiceItem> _licensePageConfigChoices = new();
+    private bool _isRefreshingLicensePageUi;
+    private string? _licensePageSelectedModSourcePath;
+    private readonly HashSet<string> _licensePageSelectedConfigKeys = new(StringComparer.OrdinalIgnoreCase);
 
     public MainWindow()
     {
+        _inferenceService = VehicleInferenceService.CreateDefault();
         InitializeComponent();
         DataContext = this;
-        LoadPersistedUiSettings();
-        if (string.IsNullOrWhiteSpace(ModsPathTextBox.Text) && Directory.Exists(DefaultModsPath))
+        _searchRefreshTimer.Tick += (_, _) =>
         {
-            ModsPathTextBox.Text = DefaultModsPath;
+            _searchRefreshTimer.Stop();
+            _configsView?.Refresh();
+            UpdateEmptyState();
+        };
+        DashboardBrandStatsGrid.ItemsSource = DashboardBrandStats;
+        ModLibraryGrid.ItemsSource = ModLibraryItems;
+        if (LicensePagePreviewDataGrid != null) LicensePagePreviewDataGrid.ItemsSource = _licensePagePreviewItems;
+        LoadPersistedUiSettings();
+        if (string.IsNullOrWhiteSpace(ModsPathTextBox.Text))
+        {
+            if (_reopenLastModsFolderOnStartup)
+            {
+                var persistedPath = ReadPersistedSettings()?.LastModsPath;
+                if (!string.IsNullOrWhiteSpace(persistedPath) && Directory.Exists(persistedPath))
+                {
+                    ModsPathTextBox.Text = persistedPath;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(ModsPathTextBox.Text) && Directory.Exists(DefaultModsPath))
+            {
+                ModsPathTextBox.Text = DefaultModsPath;
+            }
         }
         StatusTextBlock.Text = "Select a mods folder and click Scan.";
+        StatusDetailTextBlock.Text = string.Empty;
         SetupConfigsView();
+        SetWorkspacePage(string.IsNullOrWhiteSpace(_defaultStartupPage) ? "Dashboard" : _defaultStartupPage);
+        SyncSettingsPageFromMain();
+        RefreshWorkspaceSummary();
+        RefreshDataPageSummary();
+        RefreshWorkspacePageSummaries();
         StateChanged += (_, _) =>
         {
             if (WindowState != WindowState.Minimized)
             {
                 Opacity = 1;
             }
+
+            UpdateWindowChromeState();
         };
-        Closing += (_, _) => SavePersistedSettings();
+        Loaded += (_, _) =>
+        {
+            UpdateWindowChromeState();
+            ApplyLeftNavState();
+        };
+        Closing += (_, _) => { SavePersistedSettings(); SaveModMemorySnapshot(); };
     }
 
     private void BrowseMods_Click(object sender, RoutedEventArgs e)
@@ -84,6 +237,9 @@ public partial class MainWindow : MetroWindow
         if (dialog.ShowDialog() == WinForms.DialogResult.OK)
         {
             ModsPathTextBox.Text = dialog.SelectedPath;
+            RefreshSettingsPageSummary();
+            FooterRepoStateTextBlock.Text = "Repo selected";
+            SavePersistedSettings();
         }
     }
 
@@ -106,7 +262,11 @@ public partial class MainWindow : MetroWindow
         _isScanning = true;
         ScanButton.IsEnabled = false;
         BrowseButton.IsEnabled = false;
+        AutoFillAllButton.IsEnabled = false;
+        SetWorkspaceNavigationEnabled(false);
         StatusTextBlock.Text = "Scanning mods...";
+        StatusDetailTextBlock.Text = "Reading zip archives, folders, and vehicle JSON files. Page switching is temporarily locked during scan to avoid UI races.";
+        DashboardRecentActivityTextBlock.Text = "Scan in progress...";
 
         _scanCts = new CancellationTokenSource();
         try
@@ -121,11 +281,29 @@ public partial class MainWindow : MetroWindow
             _selected = null;
             ClearForm();
             SetupConfigsView();
+            ApplyPersistedModMemoryToConfigs();
+            RefreshAllWorkspaceState(persist: true);
             StatusTextBlock.Text = $"Loaded {items.Count} configs. Errors: {errors}.";
+            StatusDetailTextBlock.Text = errors > 0 ? "Some files could not be parsed cleanly. Review logs and flagged items for follow-up." : "Scan completed successfully. Open Configuration Editor to edit configs or Flagged Configs to inspect items that still need attention.";
+            DashboardRecentActivityTextBlock.Text = StatusTextBlock.Text;
+            RefreshLogsPage();
         }
         catch (OperationCanceledException)
         {
             StatusTextBlock.Text = "Scan canceled.";
+            StatusDetailTextBlock.Text = "The scan was interrupted before completion.";
+            DashboardRecentActivityTextBlock.Text = StatusTextBlock.Text;
+            RefreshLogsPage();
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = "Scan failed.";
+            StatusDetailTextBlock.Text = ex.Message;
+            DashboardRecentActivityTextBlock.Text = $"Scan failed: {ex.Message}";
+            AppendScrapeLog($"Scan failed: {ex}");
+            RefreshLogsPage();
+            System.Windows.MessageBox.Show($"The scan failed before the UI could finish updating.\n\n{ex.Message}", "Scan failed",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -134,12 +312,18 @@ public partial class MainWindow : MetroWindow
             _isScanning = false;
             ScanButton.IsEnabled = true;
             BrowseButton.IsEnabled = true;
+            AutoFillAllButton.IsEnabled = true;
+            SetWorkspaceNavigationEnabled(true);
         }
     }
 
     private void ConfigsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        
+        if (_currentWorkspacePage != "Results" || _isLoadingForm)
+        {
+            return;
+        }
+
         if (ConfigsGrid.SelectedItem is not VehicleConfigItem item)
         {
             _selected = null;
@@ -159,6 +343,8 @@ public partial class MainWindow : MetroWindow
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+
+        ApplyInferenceToForm(_selected);
 
         var defaultYear = _autoFillSettings.Year ?? DateTime.Now.Year;
 
@@ -188,6 +374,1496 @@ public partial class MainWindow : MetroWindow
         SetDirty(true);
     }
 
+    private void InternetLookup_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected == null)
+        {
+            System.Windows.MessageBox.Show("Select a config to edit first.", "Internet Lookup", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var lookupWindow = new InternetLookupWindow(_selected)
+        {
+            Owner = this
+        };
+
+        var accepted = lookupWindow.ShowDialog();
+        if (accepted != true || lookupWindow.LookupResult == null)
+        {
+            return;
+        }
+
+        var result = lookupWindow.LookupResult;
+        if (!string.IsNullOrWhiteSpace(result.Brand)) BrandTextBox.Text = result.Brand;
+        if (!string.IsNullOrWhiteSpace(result.Model)) ConfigurationTextBox.Text = result.Model;
+        if (!string.IsNullOrWhiteSpace(result.BodyStyle)) BodyStyleTextBox.Text = result.BodyStyle;
+        if (!string.IsNullOrWhiteSpace(result.Country)) CountryTextBox.Text = result.Country;
+        if (!string.IsNullOrWhiteSpace(result.Type)) TypeTextBox.Text = result.Type;
+        if (result.YearMin.HasValue) YearMinUpDown.Value = result.YearMin;
+        if (result.YearMax.HasValue) YearMaxUpDown.Value = result.YearMax;
+        if (result.EstimatedValue.HasValue && result.EstimatedValue.Value > 0) ValueUpDown.Value = result.EstimatedValue.Value;
+        if (result.Population.HasValue && result.Population.Value > 0) PopulationUpDown.Value = result.Population.Value;
+        if (!string.IsNullOrWhiteSpace(result.InsuranceClass)) SelectInsuranceClass(result.InsuranceClass);
+
+        UpdateMissingFromForm();
+        SetDirty(true);
+
+        _selected.LastAutoFillStatus = "Lookup applied";
+        _selected.LastAutoFillSource = "Internet lookup";
+        _selected.LastAutoFillDetail = result.Evidence;
+        _selected.NotifyChanges();
+    }
+
+    private void ModInternetLookup_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected == null)
+        {
+            System.Windows.MessageBox.Show("Select a config from the mod you want to look up first.", "Mod Lookup", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var lookupWindow = new InternetLookupWindow(_selected)
+        {
+            Owner = this
+        };
+
+        var accepted = lookupWindow.ShowDialog();
+        if (accepted != true || lookupWindow.LookupResult == null)
+        {
+            return;
+        }
+
+        var result = lookupWindow.LookupResult;
+        var modItems = GetSelectedModConfigs().ToList();
+        foreach (var item in modItems)
+        {
+            if (!string.IsNullOrWhiteSpace(result.Brand)) item.Brand = result.Brand;
+            if (!string.IsNullOrWhiteSpace(result.BodyStyle)) item.BodyStyle = result.BodyStyle;
+            if (!string.IsNullOrWhiteSpace(result.Country)) item.Country = result.Country;
+            if (!string.IsNullOrWhiteSpace(result.Type)) item.Type = result.Type;
+            if (result.YearMin.HasValue) item.YearMin = result.YearMin;
+            if (result.YearMax.HasValue) item.YearMax = result.YearMax;
+            item.LastAutoFillStatus = "Mod lookup applied";
+            item.LastAutoFillSource = "Internet lookup";
+            item.LastAutoFillDetail = result.Evidence;
+            item.NotifyChanges();
+        }
+
+        if (!string.IsNullOrWhiteSpace(result.Brand)) BrandTextBox.Text = result.Brand;
+        if (!string.IsNullOrWhiteSpace(result.Model)) ConfigurationTextBox.Text = result.Model;
+        if (!string.IsNullOrWhiteSpace(result.BodyStyle)) BodyStyleTextBox.Text = result.BodyStyle;
+        if (!string.IsNullOrWhiteSpace(result.Country)) CountryTextBox.Text = result.Country;
+        if (!string.IsNullOrWhiteSpace(result.Type)) TypeTextBox.Text = result.Type;
+        if (result.YearMin.HasValue) YearMinUpDown.Value = result.YearMin;
+        if (result.YearMax.HasValue) YearMaxUpDown.Value = result.YearMax;
+        UpdateMissingFromForm();
+        SetDirty(true);
+
+        StatusTextBlock.Text = $"Applied lookup fields to {modItems.Count} config(s) in {GetSelectedModDisplayName()}.";
+        StatusDetailTextBlock.Text = "Shared mod-level identity fields were updated from the selected lookup result.";
+        DashboardRecentActivityTextBlock.Text = StatusTextBlock.Text;
+        RefreshLicensePlatesPageSummary();
+    }
+
+    private void OpenLicensePlatesPage_Click(object sender, RoutedEventArgs e)
+    {
+        SetWorkspacePage("LicensePlates");
+    }
+
+    private void OpenLicensePlateManagerPageWindow_Click(object sender, RoutedEventArgs e)
+    {
+        SetWorkspacePage("LicensePlates");
+    }
+
+
+    private async void ConfigPlate_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected == null)
+        {
+            System.Windows.MessageBox.Show("Select a config first.", "Config Plate", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        await OpenSimpleConfigPlateDialogAsync(_selected);
+    }
+
+    private Task OpenSimpleConfigPlateDialogAsync(VehicleConfigItem item)
+    {
+        var plateTextBox = new System.Windows.Controls.TextBox
+        {
+            Margin = new Thickness(0, 10, 0, 0),
+            Height = 42,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = (Brush?)TryFindResource("InputBackgroundBrush") ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(10, 20, 40)),
+            Foreground = (Brush?)TryFindResource("InputForegroundBrush") ?? System.Windows.Media.Brushes.White,
+            BorderBrush = (Brush?)TryFindResource("BorderBrush") ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(58, 86, 130)),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(12, 0, 12, 0),
+            Text = item.CurrentLicensePlate ?? string.Empty
+        };
+
+        var removeCheckBox = new System.Windows.Controls.CheckBox
+        {
+            Content = "Remove this config's custom plate instead",
+            Margin = new Thickness(0, 14, 0, 0),
+            Foreground = (Brush?)TryFindResource("AppForegroundBrush") ?? System.Windows.Media.Brushes.White,
+            IsChecked = false
+        };
+        removeCheckBox.Checked += (_, _) => plateTextBox.IsEnabled = false;
+        removeCheckBox.Unchecked += (_, _) => plateTextBox.IsEnabled = true;
+
+        var applyButton = new System.Windows.Controls.Button
+        {
+            Content = "Apply",
+            Width = 140,
+            Height = 40,
+            Margin = new Thickness(12, 0, 0, 0),
+            IsDefault = true
+        };
+
+        var cancelButton = new System.Windows.Controls.Button
+        {
+            Content = "Cancel",
+            Width = 140,
+            Height = 40,
+            IsCancel = true
+        };
+
+        var window = new Window
+        {
+            Title = "Config Plate",
+            Owner = this,
+            Width = 760,
+            Height = 430,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            Background = (Brush?)TryFindResource("PanelBackgroundBrush") ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(10, 20, 40)),
+            Foreground = (Brush?)TryFindResource("AppForegroundBrush") ?? System.Windows.Media.Brushes.White,
+            Content = null
+        };
+
+        applyButton.Click += async (_, _) =>
+        {
+            var clearMode = removeCheckBox.IsChecked == true;
+            var plateText = plateTextBox.Text?.Trim() ?? string.Empty;
+            if (!clearMode && string.IsNullOrWhiteSpace(plateText))
+            {
+                System.Windows.MessageBox.Show(window, "Enter a plate value or choose remove.", "Config Plate", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            window.DialogResult = true;
+            window.Close();
+
+            await ApplyLicensePlateChangesAsync(new List<VehicleConfigItem> { item }, clearMode, plateText, $"{item.ModName} / {item.ConfigKey}");
+            RefreshLicensePlatesPageUi();
+            LoadForm(item);
+        };
+
+        cancelButton.Click += (_, _) => window.Close();
+
+        var accentBrush = (Brush?)TryFindResource("AccentBrush") ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(169, 140, 230));
+        var borderBrush = (Brush?)TryFindResource("BorderBrush") ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(58, 86, 130));
+        var cardBrush = (Brush?)TryFindResource("CardBackgroundBrush") ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 27, 52));
+        var mutedBrush = (Brush?)TryFindResource("MutedForegroundBrush") ?? new SolidColorBrush(System.Windows.Media.Color.FromRgb(160, 170, 190));
+
+        var root = new Border
+        {
+            Margin = new Thickness(14),
+            Padding = new Thickness(28),
+            Background = cardBrush,
+            BorderBrush = borderBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(18)
+        };
+
+        var stack = new StackPanel();
+        stack.Children.Add(new TextBlock { Text = "Config Plate", FontSize = 22, FontWeight = FontWeights.SemiBold });
+        stack.Children.Add(new TextBlock { Text = $"Editing only this config: {item.ModName} / {item.ConfigKey}", Margin = new Thickness(0, 10, 0, 18), Foreground = mutedBrush, TextWrapping = TextWrapping.Wrap });
+        stack.Children.Add(new TextBlock { Text = "Plate text", Foreground = mutedBrush, FontWeight = FontWeights.SemiBold });
+        stack.Children.Add(plateTextBox);
+        stack.Children.Add(removeCheckBox);
+        var buttonsRow = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new Thickness(0, 28, 0, 0) };
+        buttonsRow.Children.Add(cancelButton);
+        buttonsRow.Children.Add(applyButton);
+        stack.Children.Add(buttonsRow);
+        root.Child = stack;
+        window.Content = root;
+        applyButton.Background = accentBrush;
+        applyButton.BorderBrush = accentBrush;
+        cancelButton.Background = cardBrush;
+        cancelButton.BorderBrush = borderBrush;
+        cancelButton.Foreground = window.Foreground;
+        applyButton.Foreground = window.Foreground;
+
+        window.ShowDialog();
+        return Task.CompletedTask;
+    }
+
+
+    private static void EnforcePlateTextLimit(System.Windows.Controls.TextBox? textBox)
+    {
+        if (textBox is null) return;
+
+        const int maxPlateLength = 10;
+        var text = textBox.Text ?? string.Empty;
+        if (text.Length <= maxPlateLength) return;
+
+        var caret = textBox.CaretIndex;
+        textBox.Text = text.Substring(0, maxPlateLength);
+        textBox.CaretIndex = Math.Min(caret, maxPlateLength);
+    }
+
+    private async void ModPlates_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected == null)
+        {
+            System.Windows.MessageBox.Show("Select a config from the mod you want to edit first.", "Mod Plates", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        await OpenLicensePlateManagerAsync("Mod");
+    }
+
+    private async void WorkspacePlates_Click(object sender, RoutedEventArgs e)
+    {
+        if (Configs.Count == 0)
+        {
+            System.Windows.MessageBox.Show("Scan mods first.", "Bulk Plates", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        await OpenLicensePlateManagerAsync("Workspace");
+    }
+
+    private async Task OpenLicensePlateManagerAsync(string initialScope)
+    {
+        try
+        {
+            var configSnapshot = Configs.Where(x => x != null).ToList();
+            var window = new LicensePlateManagerWindow(configSnapshot, _selected, initialScope)
+            {
+                Owner = this
+            };
+
+            if (window.ShowDialog() != true)
+            {
+                return;
+            }
+
+            await ApplyLicensePlateChangesAsync(window.ActionableItems, window.ClearMode, window.PlateText, window.SelectedScopeDisplayLabel);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show("Could not open the license plate manager.\n\n" + ex.Message, "License Plate Manager", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private IEnumerable<VehicleConfigItem> GetSelectedModConfigs()
+    {
+        if (_selected == null)
+        {
+            return Enumerable.Empty<VehicleConfigItem>();
+        }
+
+        return Configs.Where(x => string.Equals(x.SourcePath ?? string.Empty, _selected.SourcePath ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string GetSelectedModDisplayName()
+    {
+        return string.IsNullOrWhiteSpace(_selected?.ModName) ? "Selected mod" : _selected!.ModName;
+    }
+
+    private IReadOnlyList<VehicleConfigItem> GetFilteredConfigSnapshot()
+    {
+        if (_configsView == null)
+        {
+            return Configs.ToList();
+        }
+
+        return _configsView.Cast<object>()
+            .OfType<VehicleConfigItem>()
+            .ToList();
+    }
+
+    private void OpenBulkEdit_Click(object sender, RoutedEventArgs e)
+    {
+        var selectedModItems = GetSelectedModConfigs().ToList();
+        var filteredItems = GetFilteredConfigSnapshot();
+        var flaggedItems = FlaggedConfigs.ToList();
+        var window = new BulkEditWindow(selectedModItems, filteredItems, flaggedItems, GetSelectedModDisplayName())
+        {
+            Owner = this
+        };
+
+        if (window.ShowDialog() != true || window.Request == null)
+        {
+            return;
+        }
+
+        ApplyBulkEdit(window.Request);
+    }
+
+    private void ApplyBulkEdit(BulkEditRequest request)
+    {
+        var targets = request.Scope switch
+        {
+            BulkEditScope.SelectedMod => GetSelectedModConfigs().Distinct().ToList(),
+            BulkEditScope.FlaggedConfigs => FlaggedConfigs.Distinct().ToList(),
+            _ => GetFilteredConfigSnapshot().Distinct().ToList()
+        };
+
+        if (targets.Count == 0)
+        {
+            System.Windows.MessageBox.Show("There are no configs in the selected bulk-edit scope.", "Bulk Edit Fields", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var confirmation = System.Windows.MessageBox.Show(
+            $"Apply the selected field changes to {targets.Count} config(s)?",
+            "Confirm Bulk Edit",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var writes = new List<PendingConfigWrite>();
+        var updated = 0;
+        foreach (var item in targets)
+        {
+            try
+            {
+                var updatedJson = BuildJsonForItem(item);
+                ApplyBulkEditRequestToJson(updatedJson, request);
+                item.Json = updatedJson;
+                var vehicleRoot = ResolveVehicleInfoRoot(item);
+                UpdateItemFromJson(item, updatedJson, vehicleRoot);
+                writes.Add(new PendingConfigWrite
+                {
+                    Item = item,
+                    Json = updatedJson.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
+                });
+                item.LastAutoFillStatus = "Bulk edit applied";
+                item.LastAutoFillSource = request.Scope switch
+                {
+                    BulkEditScope.SelectedMod => "Bulk edit · selected mod",
+                    BulkEditScope.FlaggedConfigs => "Bulk edit · flagged configs",
+                    _ => "Bulk edit · filtered results"
+                };
+                item.LastAutoFillDetail = BuildBulkEditSummary(request);
+                updated++;
+            }
+            catch (Exception ex)
+            {
+                AppendScrapeLog($"BULK EDIT FAILED {DescribeItem(item)} :: {ex}");
+            }
+        }
+
+        if (writes.Count == 0)
+        {
+            System.Windows.MessageBox.Show("No configs could be prepared for bulk editing.", "Bulk Edit Fields", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            WriteConfigBatch(writes, mirrorToVehicles: true);
+            _configsView?.Refresh();
+            if (_selected != null)
+            {
+                LoadForm(_selected);
+                SetDirty(false);
+            }
+            RefreshAllWorkspaceState(persist: true);
+            AppendScrapeLog($"BULK EDIT SUCCESS {updated} config(s) :: {BuildBulkEditSummary(request)}");
+            System.Windows.MessageBox.Show($"Bulk edit applied to {updated} config(s).", "Bulk Edit Fields", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            AppendScrapeLog($"BULK EDIT WRITE FAILED :: {ex}");
+            System.Windows.MessageBox.Show("Bulk edit failed while writing files." + Environment.NewLine + Environment.NewLine + ex.Message, "Bulk Edit Fields", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static void ApplyBulkEditRequestToJson(JsonObject root, BulkEditRequest request)
+    {
+        if (request.ApplyInsuranceClass)
+        {
+            root["InsuranceClass"] = request.InsuranceClass;
+        }
+
+        if (request.ApplyPopulation)
+        {
+            if (request.Population.HasValue)
+            {
+                root["Population"] = request.Population.Value;
+            }
+            else
+            {
+                root.Remove("Population");
+            }
+        }
+
+        if (request.ApplyValue && request.Value.HasValue)
+        {
+            root["Value"] = request.Value.Value;
+        }
+
+        if (request.ApplyBodyStyle)
+        {
+            root["Body Style"] = request.BodyStyle;
+        }
+
+        if (request.ApplyType)
+        {
+            root["Type"] = request.Type;
+        }
+
+        if (request.ApplyConfigType)
+        {
+            root["Config Type"] = request.ConfigType;
+        }
+    }
+
+    private static string BuildBulkEditSummary(BulkEditRequest request)
+    {
+        var parts = new List<string>();
+        if (request.ApplyInsuranceClass) parts.Add($"Insurance Class={request.InsuranceClass}");
+        if (request.ApplyPopulation) parts.Add($"Population={request.Population}");
+        if (request.ApplyValue) parts.Add($"Value={request.Value:0}");
+        if (request.ApplyBodyStyle) parts.Add($"Body Style={request.BodyStyle}");
+        if (request.ApplyType) parts.Add($"Type={request.Type}");
+        if (request.ApplyConfigType) parts.Add($"Config Type={request.ConfigType}");
+        return string.Join(" | ", parts);
+    }
+
+    private async Task ApplyLicensePlateChangesAsync(IReadOnlyList<VehicleConfigItem> items, bool clearMode, string plateText, string scopeLabel)
+    {
+        if (items.Count == 0)
+        {
+            System.Windows.MessageBox.Show("There were no matching .pc configs to update.", "License Plate Manager", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var status = clearMode ? "Removing hardcoded license plates..." : "Applying shared license plate text...";
+        var workItems = items
+            .Select((item, index) => new PlateApplyWorkItem
+            {
+                Index = index,
+                SourcePath = item.SourcePath ?? string.Empty,
+                ConfigPcPath = item.ConfigPcPath ?? string.Empty,
+                IsZip = item.IsZip,
+                HasConfigPc = item.HasConfigPc,
+                ModName = item.ModName ?? string.Empty,
+                ConfigKey = item.ConfigKey ?? string.Empty,
+                ItemLabel = DescribeItem(item)
+            })
+            .ToList();
+
+        BeginAutoFillProgress(workItems.Count, status);
+        AutoFillOverlayCancelButton.IsEnabled = false;
+
+        PlateApplyBatchResult batchResult = new();
+        var progress = new Progress<PlateApplyProgress>(p =>
+        {
+            UpdateAutoFillProgress(p.Processed, workItems.Count, p.Status, p.Detail);
+        });
+
+        try
+        {
+            var backupsEnabled = BackupToggleSwitch?.IsOn == true;
+            batchResult = await Task.Run(() => ExecutePlateApplyBatch(workItems, clearMode, plateText, backupsEnabled, status, progress));
+
+            foreach (var result in batchResult.Results.OrderBy(x => x.Index))
+            {
+                var item = items[result.Index];
+                if (result.Outcome == PlateApplyOutcome.Changed)
+                {
+                    item.CurrentLicensePlate = clearMode ? null : plateText;
+                    item.HasConfigPc = true;
+                    item.NotifyChanges();
+                }
+            }
+
+            _configsView?.Refresh();
+            if (_selected != null)
+            {
+                LoadForm(_selected);
+                SetDirty(false);
+            }
+
+            EndAutoFillProgress($"Plate operation complete. Changed: {batchResult.Changed}. Skipped: {batchResult.Skipped}. Failed: {batchResult.Failed}.", $"Scope: {scopeLabel}");
+        }
+        finally
+        {
+            HideAutoFillOverlay();
+            AutoFillOverlayCancelButton.IsEnabled = false;
+        }
+
+        var summary = $"Scope: {scopeLabel}. Changed: {batchResult.Changed}. Skipped: {batchResult.Skipped}. Failed: {batchResult.Failed}.";
+        if (batchResult.Errors.Count > 0)
+        {
+            summary += "\n\n" + string.Join("\n", batchResult.Errors.Take(8));
+            if (batchResult.Errors.Count > 8)
+            {
+                summary += $"\n...and {batchResult.Errors.Count - 8} more.";
+            }
+        }
+
+        System.Windows.MessageBox.Show(summary, "License Plate Manager", MessageBoxButton.OK, batchResult.Failed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+    }
+
+    private static PlateApplyBatchResult ExecutePlateApplyBatch(
+        List<PlateApplyWorkItem> workItems,
+        bool clearMode,
+        string plateText,
+        bool backupsEnabled,
+        string status,
+        IProgress<PlateApplyProgress>? progress)
+    {
+        var result = new PlateApplyBatchResult();
+        var processed = 0;
+
+        void report(string detail)
+        {
+            progress?.Report(new PlateApplyProgress
+            {
+                Processed = processed,
+                Status = processed >= workItems.Count ? $"{status} {processed}/{workItems.Count}" : status,
+                Detail = detail
+            });
+        }
+
+        foreach (var fileItem in workItems.Where(x => !x.IsZip))
+        {
+            report(fileItem.ItemLabel);
+            var itemResult = ProcessFilePlateApply(fileItem, clearMode, plateText, backupsEnabled);
+            result.Results.Add(itemResult);
+            if (itemResult.Outcome == PlateApplyOutcome.Changed) result.Changed++;
+            else if (itemResult.Outcome == PlateApplyOutcome.Skipped) result.Skipped++;
+            else result.Failed++;
+            if (!string.IsNullOrWhiteSpace(itemResult.ErrorMessage)) result.Errors.Add(itemResult.ErrorMessage!);
+            processed++;
+            report(fileItem.ItemLabel);
+        }
+
+        foreach (var zipGroup in workItems.Where(x => x.IsZip).GroupBy(x => x.SourcePath, StringComparer.OrdinalIgnoreCase))
+        {
+            var groupResults = ProcessZipPlateApplyGroup(zipGroup.Key, zipGroup.ToList(), clearMode, plateText, backupsEnabled, progress, status, ref processed, workItems.Count);
+            foreach (var itemResult in groupResults)
+            {
+                result.Results.Add(itemResult);
+                if (itemResult.Outcome == PlateApplyOutcome.Changed) result.Changed++;
+                else if (itemResult.Outcome == PlateApplyOutcome.Skipped) result.Skipped++;
+                else result.Failed++;
+                if (!string.IsNullOrWhiteSpace(itemResult.ErrorMessage)) result.Errors.Add(itemResult.ErrorMessage!);
+            }
+        }
+
+        return result;
+    }
+
+    private static PlateApplyItemResult ProcessFilePlateApply(PlateApplyWorkItem item, bool clearMode, string plateText, bool backupsEnabled)
+    {
+        try
+        {
+            if (!item.HasConfigPc || string.IsNullOrWhiteSpace(item.ConfigPcPath))
+            {
+                return PlateApplyItemResult.Skipped(item.Index);
+            }
+
+            var filePath = item.ConfigPcPath.Replace('/', Path.DirectorySeparatorChar);
+            if (!File.Exists(filePath))
+            {
+                return PlateApplyItemResult.Skipped(item.Index);
+            }
+
+            var configText = File.ReadAllText(filePath);
+            if (!TryRenderUpdatedLicensePlateJson(configText, clearMode, plateText, out var rendered, out var changed))
+            {
+                return PlateApplyItemResult.Skipped(item.Index);
+            }
+
+            if (!changed || string.IsNullOrWhiteSpace(rendered))
+            {
+                return PlateApplyItemResult.Skipped(item.Index);
+            }
+
+            if (backupsEnabled)
+            {
+                EnsureBackup(filePath);
+            }
+
+            File.WriteAllText(filePath, rendered, new UTF8Encoding(false));
+
+            var verifiedText = File.ReadAllText(filePath);
+            var verifiedValue = TryReadLicensePlateFromJsonText(verifiedText);
+            var expectedValue = clearMode ? null : plateText;
+            if (!string.Equals(verifiedValue ?? string.Empty, expectedValue ?? string.Empty, StringComparison.Ordinal))
+            {
+                return PlateApplyItemResult.Failed(item.Index, $"{item.ModName} / {item.ConfigKey}: verification failed after writing file.");
+            }
+
+            return PlateApplyItemResult.Changed(item.Index);
+        }
+        catch (Exception ex)
+        {
+            return PlateApplyItemResult.Failed(item.Index, $"{item.ModName} / {item.ConfigKey}: {ex.Message}");
+        }
+    }
+
+    private static List<PlateApplyItemResult> ProcessZipPlateApplyGroup(
+        string zipPath,
+        List<PlateApplyWorkItem> items,
+        bool clearMode,
+        string plateText,
+        bool backupsEnabled,
+        IProgress<PlateApplyProgress>? progress,
+        string status,
+        ref int processed,
+        int totalCount)
+    {
+        var results = new List<PlateApplyItemResult>();
+        if (string.IsNullOrWhiteSpace(zipPath) || !File.Exists(zipPath))
+        {
+            foreach (var item in items)
+            {
+                processed++;
+                progress?.Report(new PlateApplyProgress { Processed = processed, Status = $"{status} {processed}/{totalCount}", Detail = item.ItemLabel });
+                results.Add(PlateApplyItemResult.Skipped(item.Index));
+            }
+            return results;
+        }
+
+        try
+        {
+            var changesByEntry = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var replacementNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var pendingChangedItems = new List<PlateApplyWorkItem>();
+
+            using (var sourceArchive = ZipFile.OpenRead(zipPath))
+            {
+                foreach (var item in items)
+                {
+                    progress?.Report(new PlateApplyProgress { Processed = processed, Status = status, Detail = item.ItemLabel });
+                    if (!item.HasConfigPc || string.IsNullOrWhiteSpace(item.ConfigPcPath))
+                    {
+                        results.Add(PlateApplyItemResult.Skipped(item.Index));
+                        processed++;
+                        progress?.Report(new PlateApplyProgress { Processed = processed, Status = $"{status} {processed}/{totalCount}", Detail = item.ItemLabel });
+                        continue;
+                    }
+
+                    var normalizedEntryPath = NormalizeZipEntryPath(item.ConfigPcPath);
+                    var entry = FindZipEntry(sourceArchive, normalizedEntryPath);
+                    if (entry == null)
+                    {
+                        results.Add(PlateApplyItemResult.Skipped(item.Index));
+                        processed++;
+                        progress?.Report(new PlateApplyProgress { Processed = processed, Status = $"{status} {processed}/{totalCount}", Detail = item.ItemLabel });
+                        continue;
+                    }
+
+                    string configText;
+                    using (var reader = new StreamReader(entry.Open(), Encoding.UTF8, true))
+                    {
+                        configText = reader.ReadToEnd();
+                    }
+
+                    if (!TryRenderUpdatedLicensePlateJson(configText, clearMode, plateText, out var rendered, out var changed))
+                    {
+                        results.Add(PlateApplyItemResult.Skipped(item.Index));
+                    }
+                    else if (changed && !string.IsNullOrWhiteSpace(rendered))
+                    {
+                        changesByEntry[normalizedEntryPath] = rendered!;
+                        replacementNames[normalizedEntryPath] = entry.FullName;
+                        pendingChangedItems.Add(item);
+                    }
+                    else
+                    {
+                        results.Add(PlateApplyItemResult.Skipped(item.Index));
+                    }
+
+                    processed++;
+                    progress?.Report(new PlateApplyProgress { Processed = processed, Status = $"{status} {processed}/{totalCount}", Detail = item.ItemLabel });
+                }
+            }
+
+            if (changesByEntry.Count > 0)
+            {
+                if (backupsEnabled)
+                {
+                    EnsureBackup(zipPath);
+                }
+
+                WriteZipEntries(zipPath, changesByEntry, replacementNames);
+
+                using (var verifyArchive = ZipFile.OpenRead(zipPath))
+                {
+                    foreach (var item in pendingChangedItems)
+                    {
+                        var normalizedEntryPath = NormalizeZipEntryPath(item.ConfigPcPath);
+                        var verifyEntry = FindZipEntry(verifyArchive, normalizedEntryPath);
+                        if (verifyEntry == null)
+                        {
+                            results.Add(PlateApplyItemResult.Failed(item.Index, $"{item.ModName} / {item.ConfigKey}: rewritten entry could not be found for verification."));
+                            continue;
+                        }
+
+                        string verifyText;
+                        using (var verifyReader = new StreamReader(verifyEntry.Open(), Encoding.UTF8, true))
+                        {
+                            verifyText = verifyReader.ReadToEnd();
+                        }
+
+                        var verifiedValue = TryReadLicensePlateFromJsonText(verifyText);
+                        var expectedValue = clearMode ? null : plateText;
+                        if (string.Equals(verifiedValue ?? string.Empty, expectedValue ?? string.Empty, StringComparison.Ordinal))
+                        {
+                            results.Add(PlateApplyItemResult.Changed(item.Index));
+                        }
+                        else
+                        {
+                            results.Add(PlateApplyItemResult.Failed(item.Index, $"{item.ModName} / {item.ConfigKey}: verification failed after rewriting zip."));
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            var finalized = new HashSet<int>(results.Select(r => r.Index));
+            foreach (var item in items)
+            {
+                if (finalized.Contains(item.Index))
+                {
+                    continue;
+                }
+
+                results.Add(PlateApplyItemResult.Failed(item.Index, $"{item.ModName} / {item.ConfigKey}: {ex.Message}"));
+            }
+        }
+
+        return results;
+    }
+
+    private static bool TryRenderUpdatedLicensePlateJson(string configText, bool clearMode, string plateText, out string? rendered, out bool changed)
+    {
+        rendered = null;
+        changed = false;
+
+        if (ParseJson(configText) is not JsonObject root)
+        {
+            throw new InvalidDataException("The config .pc file could not be parsed as JSON.");
+        }
+
+        if (clearMode)
+        {
+            if (!root.ContainsKey("licenseName"))
+            {
+                return false;
+            }
+
+            root.Remove("licenseName");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(plateText))
+            {
+                return false;
+            }
+
+            var currentValue = ReadString(root, "licenseName") ?? string.Empty;
+            if (string.Equals(currentValue, plateText, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            root["licenseName"] = plateText;
+        }
+
+        rendered = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        changed = true;
+        return true;
+    }
+
+    private static string? TryReadLicensePlateFromJsonText(string jsonText)
+    {
+        try
+        {
+            var root = ParseJson(jsonText ?? string.Empty);
+            return ReadString(root, "licenseName");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void EnsureBackup(string targetPath)
+    {
+        var backupPath = targetPath + ".bak";
+        if (!File.Exists(backupPath))
+        {
+            File.Copy(targetPath, backupPath);
+        }
+    }
+
+    private sealed class PlateApplyWorkItem
+    {
+        public int Index { get; init; }
+        public string SourcePath { get; init; } = string.Empty;
+        public string ConfigPcPath { get; init; } = string.Empty;
+        public bool IsZip { get; init; }
+        public bool HasConfigPc { get; init; }
+        public string ModName { get; init; } = string.Empty;
+        public string ConfigKey { get; init; } = string.Empty;
+        public string ItemLabel { get; init; } = string.Empty;
+    }
+
+    private sealed class PlateApplyProgress
+    {
+        public int Processed { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public string Detail { get; init; } = string.Empty;
+    }
+
+    private enum PlateApplyOutcome
+    {
+        Changed,
+        Skipped,
+        Failed
+    }
+
+    private sealed class PlateApplyItemResult
+    {
+        public int Index { get; init; }
+        public PlateApplyOutcome Outcome { get; init; }
+        public string? ErrorMessage { get; init; }
+
+        public static PlateApplyItemResult Changed(int index) => new() { Index = index, Outcome = PlateApplyOutcome.Changed };
+        public static PlateApplyItemResult Skipped(int index) => new() { Index = index, Outcome = PlateApplyOutcome.Skipped };
+        public static PlateApplyItemResult Failed(int index, string errorMessage) => new() { Index = index, Outcome = PlateApplyOutcome.Failed, ErrorMessage = errorMessage };
+    }
+
+    private sealed class PlateApplyBatchResult
+    {
+        public List<PlateApplyItemResult> Results { get; } = new();
+        public List<string> Errors { get; } = new();
+        public int Changed { get; set; }
+        public int Skipped { get; set; }
+        public int Failed { get; set; }
+    }
+
+    private void ApplyInferenceToItem(VehicleConfigItem item)
+    {
+        var inference = _inferenceService.Infer(item);
+        ApplyInferenceResultToItem(item, inference);
+    }
+
+    private void ApplyInferenceResultToItem(VehicleConfigItem item, VehicleInferenceResult inference)
+    {
+        item.InferenceReason = inference.InferenceReason;
+        item.IsSuspicious = inference.IsSuspicious;
+        item.ReviewReason = inference.IsSuspicious ? inference.SuspicionReason ?? inference.BrandEvidence : null;
+
+        if (!inference.HasAnyValue)
+        {
+            ApplyDefaultAutoFillFallbacksToItem(item);
+            item.NotifyChanges();
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(inference.Model)) item.VehicleName = inference.Model;
+        if (!string.IsNullOrWhiteSpace(inference.Brand)) item.Brand = inference.Brand;
+        if (!string.IsNullOrWhiteSpace(inference.Country)) item.Country = inference.Country;
+        if (!string.IsNullOrWhiteSpace(inference.Type)) item.Type = inference.Type;
+        if (!string.IsNullOrWhiteSpace(inference.BodyStyle)) item.BodyStyle = inference.BodyStyle;
+        if (!string.IsNullOrWhiteSpace(inference.ConfigType)) item.ConfigType = inference.ConfigType;
+        if (!string.IsNullOrWhiteSpace(inference.Configuration)) item.Configuration = inference.Configuration;
+        if (!string.IsNullOrWhiteSpace(inference.InsuranceClass)) item.InsuranceClass = inference.InsuranceClass;
+        if (inference.YearMin.HasValue) item.YearMin = inference.YearMin;
+        if (inference.YearMax.HasValue) item.YearMax = inference.YearMax;
+        if (inference.Value.HasValue && inference.Value.Value > 0) item.Value = inference.Value;
+        if (inference.Population.HasValue && inference.Population.Value > 0) item.Population = inference.Population;
+
+        ApplyDefaultAutoFillFallbacksToItem(item);
+        item.NotifyChanges();
+    }
+
+    private string DescribeItem(VehicleConfigItem item)
+    {
+        var name = !string.IsNullOrWhiteSpace(item.VehicleName) ? item.VehicleName : (!string.IsNullOrWhiteSpace(item.Configuration) ? item.Configuration : item.ConfigKey);
+        return $"{item.ModName} / {name}";
+    }
+
+    private string BuildInferenceProgressDetail(VehicleInferenceResult inference)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(inference.Brand) || !string.IsNullOrWhiteSpace(inference.Configuration))
+        {
+            parts.Add($"Vehicle: {string.Join(" ", new[] { inference.Brand, inference.Configuration }.Where(x => !string.IsNullOrWhiteSpace(x)))}".Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(inference.InferenceReason))
+        {
+            parts.Add($"Match: {inference.InferenceReason}");
+        }
+
+        if (inference.Value.HasValue)
+        {
+            var source = string.IsNullOrWhiteSpace(inference.ValueSource) ? "Estimated value" : inference.ValueSource;
+            parts.Add($"Value: ${Math.Round(inference.Value.Value):N0} ({source})");
+        }
+
+        if (inference.Population.HasValue)
+        {
+            parts.Add($"Population: {inference.Population.Value:N0}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(inference.BrandEvidence))
+        {
+            parts.Add($"Reason: {inference.BrandEvidence}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(inference.ValueEvidence))
+        {
+            parts.Add($"Evidence: {inference.ValueEvidence}");
+        }
+
+        if (inference.IsSuspicious && !string.IsNullOrWhiteSpace(inference.SuspicionReason))
+        {
+            parts.Add($"Review: {inference.SuspicionReason}");
+        }
+
+        return parts.Count == 0 ? "No new metadata found; defaults may have been used." : string.Join("  |  ", parts);
+    }
+
+    private void BeginAutoFillProgress(int total, string status)
+    {
+        AutoFillProgressBar.Visibility = Visibility.Visible;
+        AutoFillProgressBar.IsIndeterminate = total <= 0;
+        AutoFillProgressBar.Minimum = 0;
+        AutoFillProgressBar.Maximum = Math.Max(1, total);
+        AutoFillProgressBar.Value = 0;
+        StatusTextBlock.Text = status;
+        StatusDetailTextBlock.Text = string.Empty;
+        ShowAutoFillOverlay(total, status, string.Empty);
+    }
+
+    private void UpdateAutoFillProgress(int processed, int total, string status, string detail)
+    {
+        AutoFillProgressBar.Visibility = Visibility.Visible;
+        AutoFillProgressBar.IsIndeterminate = total <= 0;
+        AutoFillProgressBar.Maximum = Math.Max(1, total);
+        AutoFillProgressBar.Value = Math.Min(processed, Math.Max(1, total));
+        StatusTextBlock.Text = status;
+        StatusDetailTextBlock.Text = detail;
+        UpdateAutoFillOverlay(processed, total, status, detail);
+    }
+
+    private void EndAutoFillProgress(string status, string detail = "")
+    {
+        AutoFillProgressBar.IsIndeterminate = false;
+        AutoFillProgressBar.Visibility = Visibility.Collapsed;
+        AutoFillProgressBar.Value = 0;
+        StatusTextBlock.Text = status;
+        StatusDetailTextBlock.Text = detail;
+        AutoFillOverlayProgressBar.IsIndeterminate = false;
+        AutoFillOverlayProgressBar.Value = 0;
+        AutoFillOverlayStatusTextBlock.Text = status;
+        AutoFillOverlayDetailTextBlock.Text = detail;
+    }
+
+    private void ShowAutoFillOverlay(int total, string status, string detail = "")
+    {
+        AutoFillOverlay.Visibility = Visibility.Visible;
+        AutoFillOverlayProgressBar.IsIndeterminate = total <= 0;
+        AutoFillOverlayProgressBar.Minimum = 0;
+        AutoFillOverlayProgressBar.Maximum = Math.Max(1, total);
+        AutoFillOverlayProgressBar.Value = 0;
+        AutoFillOverlayStatusTextBlock.Text = status;
+        AutoFillOverlayDetailTextBlock.Text = detail;
+        TitleBar.IsHitTestVisible = false;
+        MainWorkspaceGrid.IsEnabled = false;
+        AutoFillOverlay.IsHitTestVisible = true;
+        AutoFillOverlayCancelButton.IsEnabled = true;
+    }
+
+    private void UpdateAutoFillOverlay(int processed, int total, string status, string detail)
+    {
+        AutoFillOverlayProgressBar.IsIndeterminate = total <= 0;
+        AutoFillOverlayProgressBar.Maximum = Math.Max(1, total);
+        AutoFillOverlayProgressBar.Value = Math.Min(processed, Math.Max(1, total));
+        AutoFillOverlayStatusTextBlock.Text = status;
+        AutoFillOverlayDetailTextBlock.Text = detail;
+    }
+
+    private void HideAutoFillOverlay()
+    {
+        AutoFillOverlay.Visibility = Visibility.Collapsed;
+        TitleBar.IsHitTestVisible = true;
+        MainWorkspaceGrid.IsEnabled = true;
+        AutoFillOverlayCancelButton.IsEnabled = false;
+    }
+
+    private static void AppendScrapeLog(string message)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(ScrapeLogPath);
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            File.AppendAllText(ScrapeLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
+        }
+        catch
+        {
+        }
+    }
+
+    private void SetItemAutoFillState(VehicleConfigItem item, string status, string? source = null, string? detail = null)
+    {
+        if (string.Equals(item.LastAutoFillStatus, status, StringComparison.Ordinal) &&
+            string.Equals(item.LastAutoFillSource, source, StringComparison.Ordinal) &&
+            string.Equals(item.LastAutoFillDetail, detail, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        item.LastAutoFillStatus = status;
+        item.LastAutoFillSource = source;
+        item.LastAutoFillDetail = detail;
+        item.NotifyChanges();
+    }
+
+    private bool ShouldPushAutoFillUiProgress(bool force = false)
+    {
+        if (force)
+        {
+            lock (_autoFillUiProgressGate)
+            {
+                _lastAutoFillUiProgressUpdateUtc = DateTime.UtcNow;
+            }
+            return true;
+        }
+
+        var now = DateTime.UtcNow;
+        lock (_autoFillUiProgressGate)
+        {
+            if ((now - _lastAutoFillUiProgressUpdateUtc).TotalMilliseconds < AutoFillUiProgressIntervalMs)
+            {
+                return false;
+            }
+
+            _lastAutoFillUiProgressUpdateUtc = now;
+            return true;
+        }
+    }
+
+    private void ApplyDefaultAutoFillFallbacksToItem(VehicleConfigItem item)
+    {
+        var defaultYear = _autoFillSettings.Year ?? DateTime.Now.Year;
+
+        if (_autoFillSettings.UseBrand && VehicleConfigItem.IsMissingText(item.Brand)) item.Brand = _autoFillSettings.Brand;
+        if (_autoFillSettings.UseCountry && VehicleConfigItem.IsMissingText(item.Country)) item.Country = _autoFillSettings.Country;
+        if (_autoFillSettings.UseType && VehicleConfigItem.IsMissingText(item.Type)) item.Type = _autoFillSettings.Type;
+        if (_autoFillSettings.UseBodyStyle && VehicleConfigItem.IsMissingText(item.BodyStyle)) item.BodyStyle = _autoFillSettings.BodyStyle;
+        if (_autoFillSettings.UseConfigType && VehicleConfigItem.IsMissingText(item.ConfigType)) item.ConfigType = _autoFillSettings.ConfigType;
+
+        if (_autoFillSettings.UseYear)
+        {
+            item.YearMin ??= defaultYear;
+            item.YearMax ??= defaultYear;
+        }
+
+        if (_autoFillSettings.UseValue && (!item.Value.HasValue || item.Value.Value <= 0))
+        {
+            item.Value = _autoFillSettings.Value;
+        }
+
+        if (_autoFillSettings.UsePopulation && (!item.Population.HasValue || item.Population.Value <= 0))
+        {
+            item.Population = _autoFillSettings.Population;
+        }
+
+        if (VehicleConfigItem.IsMissingText(item.InsuranceClass))
+        {
+            item.InsuranceClass = DefaultInsuranceClass;
+        }
+    }
+
+    private void ApplyInferenceToForm(VehicleConfigItem item)
+    {
+        var inference = _inferenceService.Infer(item);
+        if (!inference.HasAnyValue)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(BrandTextBox.Text) && !string.IsNullOrWhiteSpace(inference.Brand)) BrandTextBox.Text = inference.Brand;
+        if (string.IsNullOrWhiteSpace(CountryTextBox.Text) && !string.IsNullOrWhiteSpace(inference.Country)) CountryTextBox.Text = inference.Country;
+        if (string.IsNullOrWhiteSpace(TypeTextBox.Text) && !string.IsNullOrWhiteSpace(inference.Type)) TypeTextBox.Text = inference.Type;
+        if (string.IsNullOrWhiteSpace(BodyStyleTextBox.Text) && !string.IsNullOrWhiteSpace(inference.BodyStyle)) BodyStyleTextBox.Text = inference.BodyStyle;
+        if (string.IsNullOrWhiteSpace(ConfigTypeTextBox.Text) && !string.IsNullOrWhiteSpace(inference.ConfigType)) ConfigTypeTextBox.Text = inference.ConfigType;
+        if (string.IsNullOrWhiteSpace(ConfigurationTextBox.Text) && !string.IsNullOrWhiteSpace(inference.Configuration)) ConfigurationTextBox.Text = inference.Configuration;
+
+        var currentInsurance = GetSelectedInsuranceClass();
+        if ((string.IsNullOrWhiteSpace(currentInsurance) || currentInsurance == DefaultInsuranceClass) && !string.IsNullOrWhiteSpace(inference.InsuranceClass))
+        {
+            SelectInsuranceClass(inference.InsuranceClass);
+        }
+
+        if (!ReadInteger(YearMinUpDown.Value).HasValue && inference.YearMin.HasValue) YearMinUpDown.Value = inference.YearMin.Value;
+        if (!ReadInteger(YearMaxUpDown.Value).HasValue && inference.YearMax.HasValue) YearMaxUpDown.Value = inference.YearMax.Value;
+        if (!ValueUpDown.Value.HasValue && inference.Value.HasValue) ValueUpDown.Value = inference.Value.Value;
+        if (!ReadInteger(PopulationUpDown.Value).HasValue && inference.Population.HasValue)
+        {
+            PopulationUpDown.Value = inference.Population.Value;
+            UpdatePopulationPresetFromValue(inference.Population.Value);
+        }
+    }
+
+    private async void AutoFillAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isAutoFillAllRunning)
+        {
+            return;
+        }
+
+        if (Configs.Count == 0)
+        {
+            System.Windows.MessageBox.Show("Scan mods first.", "Auto-fill all", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var confirmationMessage = $"Auto Fill All will overwrite autofill-supported fields for all detected mod files ({Configs.Count} configs).\n\n" +
+            "This can take an extended amount of time depending on how many mods are installed. Suspicious or unresolved mods may be sent to the review wizard afterward.\n\n" +
+            "Do you want to continue?";
+        var confirmation = System.Windows.MessageBox.Show(
+            confirmationMessage,
+            "Confirm Auto Fill All",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _isAutoFillAllRunning = true;
+        _autoFillAllCts = new CancellationTokenSource();
+        BrowseButton.IsEnabled = false;
+        ScanButton.IsEnabled = false;
+        AutoFillAllButton.IsEnabled = false;
+        CancelAutoFillAllButton.IsEnabled = true;
+        OpenAutoFillSettingsFromPageButton.IsEnabled = false;
+        if (BulkEditFieldsButton != null) BulkEditFieldsButton.IsEnabled = false;
+        BeginAutoFillProgress(Configs.Count, "Auto-filling all configs...");
+        _lastAutoFillUiProgressUpdateUtc = DateTime.MinValue;
+        RealVehiclePricingService.SetBulkAutofillMode(true);
+        AppendScrapeLog($"=== Auto Fill All started for {Configs.Count} configs ===");
+
+        try
+        {
+            var updated = 0;
+            var saved = 0;
+            var failed = 0;
+            var processed = 0;
+            var canceled = false;
+            var sourceGroups = Configs
+                .GroupBy(x => x.SourcePath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var sourceGroup in sourceGroups)
+            {
+                if (_autoFillAllCts.IsCancellationRequested)
+                {
+                    canceled = true;
+                    break;
+                }
+
+                var sourceItems = sourceGroup.ToList();
+                var pendingWrites = new List<PendingConfigWrite>();
+                var completedItems = new List<(VehicleConfigItem Item, VehicleInferenceResult Inference, string Detail, string Source)>();
+                var sourceLabel = Path.GetFileName(sourceGroup.Key);
+
+                foreach (var item in sourceItems)
+                {
+                    if (_autoFillAllCts.IsCancellationRequested)
+                    {
+                        canceled = true;
+                        break;
+                    }
+
+                    var itemLabel = DescribeItem(item);
+                    SetItemAutoFillState(item, "Running", "Working", $"Starting {itemLabel}");
+                    UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Starting {itemLabel}");
+                    AppendScrapeLog($"START {itemLabel}");
+
+                    try
+                    {
+                        var inference = await Task.Run(() => _inferenceService.Infer(item, detail =>
+                        {
+                            if (ShouldPushAutoFillUiProgress())
+                            {
+                                Dispatcher.BeginInvoke(new Action(() =>
+                                {
+                                    SetItemAutoFillState(item, "Running", "Working", detail);
+                                    UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"{itemLabel}: {detail}");
+                                }));
+                            }
+                        }, _autoFillAllCts.Token), _autoFillAllCts.Token);
+
+                        var shouldHoldForReview = _holdWeakMatchesForReview && (inference.IsSuspicious || inference.ConfidenceScore < 55 || string.Equals(inference.ConfidenceTier, "Fallback", StringComparison.OrdinalIgnoreCase)) && !item.HasSourceHints;
+                        var detail = BuildInferenceProgressDetail(inference);
+                        if (shouldHoldForReview)
+                        {
+                            item.InferenceReason = inference.InferenceReason;
+                            item.IsSuspicious = true;
+                            item.ReviewReason = !string.IsNullOrWhiteSpace(inference.SuspicionReason)
+                                ? inference.SuspicionReason
+                                : $"Held for review due to low-confidence or conflicting match. {detail}";
+                            processed++;
+                            SetItemAutoFillState(item, "Needs review", "Held for review", detail);
+                            item.NotifyChanges();
+                            UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"{itemLabel}: held for review");
+                            AppendScrapeLog($"HELD {itemLabel} :: {detail}");
+                            continue;
+                        }
+
+                        ApplyInferenceResultToItem(item, inference);
+                        var json = BuildJsonForItem(item);
+                        item.Json = json;
+                        var rendered = json.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+                        pendingWrites.Add(new PendingConfigWrite { Item = item, Json = rendered });
+                        var source = string.IsNullOrWhiteSpace(inference.ValueSource) ? "Heuristic/local rules" : inference.ValueSource!;
+                        completedItems.Add((item, inference, detail, source));
+                        SetItemAutoFillState(item, "Running", "Queued", $"Prepared changes for {itemLabel}");
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        canceled = true;
+                        SetItemAutoFillState(item, "Canceled", "Canceled", "Operation canceled by user.");
+                        AppendScrapeLog($"CANCELED {itemLabel}");
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        processed++;
+                        SetItemAutoFillState(item, "Failed", "Error", ex.Message);
+                        UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Failed on {itemLabel}: {ex.Message}");
+                        AppendScrapeLog($"FAILED {itemLabel} :: {ex}");
+                    }
+
+                    await Task.Yield();
+                }
+
+                if (completedItems.Count > 0)
+                {
+                    try
+                    {
+                        UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Saving {sourceLabel} ({completedItems.Count} configs)");
+                        WriteConfigBatch(pendingWrites, mirrorToVehicles: true);
+
+                        foreach (var completed in completedItems)
+                        {
+                            completed.Item.NotifyChanges();
+                            updated++;
+                            saved++;
+                            processed++;
+                            SetItemAutoFillState(completed.Item, "Completed", completed.Source, completed.Detail);
+                            UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"{DescribeItem(completed.Item)}: {completed.Detail}");
+                            AppendScrapeLog($"SUCCESS {DescribeItem(completed.Item)} :: Source={completed.Source} :: {completed.Detail}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        foreach (var completed in completedItems)
+                        {
+                            failed++;
+                            processed++;
+                            SetItemAutoFillState(completed.Item, "Failed", "Error", ex.Message);
+                            UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Failed saving {DescribeItem(completed.Item)}: {ex.Message}");
+                            AppendScrapeLog($"FAILED {DescribeItem(completed.Item)} :: {ex}");
+                        }
+                    }
+                }
+
+                if (canceled)
+                {
+                    break;
+                }
+            }
+
+            _configsView?.Refresh();
+            if (_selected != null)
+            {
+                LoadForm(_selected);
+                SetDirty(false);
+            }
+
+            if (!canceled)
+            {
+                var reviewOutcome = await RunRenamerWizardIfNeededAsync();
+                if (reviewOutcome.ReviewedCount > 0 || reviewOutcome.IgnoredCount > 0 || reviewOutcome.RetriedCount > 0)
+                {
+                    AppendScrapeLog($"REVIEW outcome :: retried={reviewOutcome.RetriedCount} ignored={reviewOutcome.IgnoredCount} reviewed={reviewOutcome.ReviewedCount}");
+                }
+            }
+
+            if (canceled)
+            {
+                EndAutoFillProgress($"Auto-fill canceled at {processed}/{Configs.Count}. Updated: {updated}. Saved: {saved}. Failed: {failed}.", $"See scrape log: {ScrapeLogPath}");
+            }
+            else
+            {
+                EndAutoFillProgress($"Auto-fill complete. Updated: {updated}. Saved: {saved}. Failed: {failed}.", $"See scrape log: {ScrapeLogPath}");
+                if (_openReviewQueueAfterAutoFill && FlaggedConfigs.Count > 0)
+                {
+                    SetWorkspacePage("ReviewQueue");
+                }
+            }
+            AppendScrapeLog("=== Auto Fill All finished ===");
+        }
+        finally
+        {
+            _autoFillAllCts?.Dispose();
+            _autoFillAllCts = null;
+            _isAutoFillAllRunning = false;
+            BrowseButton.IsEnabled = true;
+            ScanButton.IsEnabled = true;
+            AutoFillAllButton.IsEnabled = true;
+            CancelAutoFillAllButton.IsEnabled = false;
+            OpenAutoFillSettingsFromPageButton.IsEnabled = true;
+            if (BulkEditFieldsButton != null) BulkEditFieldsButton.IsEnabled = true;
+            try
+            {
+                _inferenceService.FlushPricingCache();
+            }
+            catch
+            {
+                // keep non-blocking
+            }
+            RealVehiclePricingService.SetBulkAutofillMode(false);
+            HideAutoFillOverlay();
+        }
+    }
+
+    private void CancelAutoFillAll_Click(object sender, RoutedEventArgs e)
+    {
+        _autoFillAllCts?.Cancel();
+    }
+
+    private JsonObject BuildJsonForItem(VehicleConfigItem item)
+    {
+        JsonObject root;
+        if (item.Json is JsonObject existing)
+        {
+            root = (JsonObject)existing.DeepClone();
+        }
+        else
+        {
+            root = new JsonObject();
+        }
+
+        SetJsonStringOrRemove(root, "Name", item.VehicleName ?? item.ConfigKey);
+        SetJsonStringOrRemove(root, "Brand", item.Brand);
+        SetJsonStringOrRemove(root, "Country", item.Country);
+        SetJsonStringOrRemove(root, "Type", item.Type);
+        SetJsonStringOrRemove(root, "Body Style", item.BodyStyle);
+        SetJsonStringOrRemove(root, "Config Type", item.ConfigType);
+        SetJsonStringOrRemove(root, "Configuration", item.Configuration);
+        SetJsonStringOrRemove(root, "InsuranceClass", item.InsuranceClass ?? DefaultInsuranceClass);
+        SetJsonStringOrRemove(root, "Region", DefaultRegion);
+        SetJsonNumberOrRemove(root, "Value", item.Value);
+        SetJsonIntegerOrRemove(root, "Population", item.Population);
+        SetYearsOrRemove(root, item.YearMin, item.YearMax);
+
+        return root;
+    }
+
+
+    private JsonNode? ResolveVehicleInfoRoot(VehicleConfigItem item)
+    {
+        if (item.VehicleInfoJson != null)
+        {
+            return item.VehicleInfoJson;
+        }
+
+        var vehicleInfoPath = !string.IsNullOrWhiteSpace(item.VehicleInfoPath)
+            ? item.VehicleInfoPath
+            : BuildVehicleInfoPath(item.InfoPath, item.IsZip);
+        var root = TryLoadVehicleInfoRoot(item.SourcePath, vehicleInfoPath, item.IsZip);
+        if (root != null)
+        {
+            item.VehicleInfoJson = root;
+            item.VehicleInfoPath = vehicleInfoPath;
+        }
+
+        return root;
+    }
+
+    private static void SetJsonStringOrRemove(JsonObject root, string key, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            root.Remove(key);
+            return;
+        }
+
+        root[key] = value.Trim();
+    }
+
+    private static void SetJsonNumberOrRemove(JsonObject root, string key, double? value)
+    {
+        if (!value.HasValue)
+        {
+            root.Remove(key);
+            return;
+        }
+
+        root[key] = value.Value;
+    }
+
+    private static void SetJsonIntegerOrRemove(JsonObject root, string key, int? value)
+    {
+        if (!value.HasValue)
+        {
+            root.Remove(key);
+            return;
+        }
+
+        root[key] = value.Value;
+    }
+
+    private static void SetYearsOrRemove(JsonObject root, int? min, int? max)
+    {
+        if (!min.HasValue && !max.HasValue)
+        {
+            root.Remove("Years");
+            return;
+        }
+
+        var years = new JsonObject();
+        if (min.HasValue)
+        {
+            years["min"] = min.Value;
+        }
+        if (max.HasValue)
+        {
+            years["max"] = max.Value;
+        }
+        root["Years"] = years;
+    }
+
     private void SaveChanges_Click(object sender, RoutedEventArgs e)
     {
         if (_selected == null)
@@ -204,7 +1880,7 @@ public partial class MainWindow : MetroWindow
         }
 
         _selected.Json = updated;
-        UpdateItemFromJson(_selected, updated);
+        UpdateItemFromJson(_selected, updated, ResolveVehicleInfoRoot(_selected));
 
         var json = updated.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         try
@@ -213,6 +1889,7 @@ public partial class MainWindow : MetroWindow
             _selected.NotifyChanges();
             LoadForm(_selected);
             SetDirty(false);
+            RefreshAllWorkspaceState(persist: true);
             StatusTextBlock.Text = $"Saved {_selected.ConfigKey} ({_selected.ModName}).{mirrorResult.BuildStatusSuffix(_selected.ModelKey)}";
 
             if (!string.IsNullOrWhiteSpace(mirrorResult.HardError))
@@ -252,10 +1929,11 @@ public partial class MainWindow : MetroWindow
             }
 
             _selected.Json = root;
-            UpdateItemFromJson(_selected, root);
+            UpdateItemFromJson(_selected, root, ResolveVehicleInfoRoot(_selected));
             _selected.NotifyChanges();
             LoadForm(_selected);
             SetDirty(false);
+            RefreshAllWorkspaceState(persist: false);
             StatusTextBlock.Text = $"Reloaded {_selected.ConfigKey} ({_selected.ModName}).";
         }
         catch (Exception ex)
@@ -270,32 +1948,43 @@ public partial class MainWindow : MetroWindow
         var items = new List<VehicleConfigItem>();
         var errors = 0;
 
-        foreach (var modDir in Directory.EnumerateDirectories(modsPath))
+        try
         {
-            token.ThrowIfCancellationRequested();
-            var dirName = Path.GetFileName(modDir);
-            if (string.Equals(dirName, "unpacked", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            AddFolderModConfigs(modDir, dirName, items, ref errors, token);
-        }
-
-        var unpackedRoot = Path.Combine(modsPath, "unpacked");
-        if (Directory.Exists(unpackedRoot))
-        {
-            foreach (var modDir in Directory.EnumerateDirectories(unpackedRoot))
+            foreach (var modDir in Directory.EnumerateDirectories(modsPath))
             {
                 token.ThrowIfCancellationRequested();
-                AddFolderModConfigs(modDir, Path.GetFileName(modDir), items, ref errors, token);
+                var dirName = Path.GetFileName(modDir);
+                if (string.Equals(dirName, "unpacked", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                AddFolderModConfigs(modDir, dirName, items, ref errors, token);
+            }
+
+            var unpackedRoot = Path.Combine(modsPath, "unpacked");
+            if (Directory.Exists(unpackedRoot))
+            {
+                foreach (var modDir in Directory.EnumerateDirectories(unpackedRoot))
+                {
+                    token.ThrowIfCancellationRequested();
+                    AddFolderModConfigs(modDir, Path.GetFileName(modDir), items, ref errors, token);
+                }
+            }
+
+            foreach (var zipPath in Directory.EnumerateFiles(modsPath, "*.zip"))
+            {
+                token.ThrowIfCancellationRequested();
+                AddZipModConfigs(zipPath, items, ref errors, token);
             }
         }
-
-        foreach (var zipPath in Directory.EnumerateFiles(modsPath, "*.zip"))
+        catch (OperationCanceledException)
         {
-            token.ThrowIfCancellationRequested();
-            AddZipModConfigs(zipPath, items, ref errors, token);
+            throw;
+        }
+        catch
+        {
+            errors++;
         }
 
         return (items, errors);
@@ -317,7 +2006,7 @@ public partial class MainWindow : MetroWindow
             return false;
         }
 
-        if (MissingOnlyCheckBox?.IsChecked == true && !item.HasMissing)
+        if (MissingOnlyCheckBox?.IsChecked == true && !item.NeedsReview)
         {
             return false;
         }
@@ -326,10 +2015,24 @@ public partial class MainWindow : MetroWindow
         if (!string.IsNullOrWhiteSpace(query))
         {
             var q = query.ToLowerInvariant();
-            if (!(item.ModName.ToLowerInvariant().Contains(q) ||
-                  item.ModelKey.ToLowerInvariant().Contains(q) ||
-                  item.ConfigKey.ToLowerInvariant().Contains(q) ||
-                  (item.VehicleName?.ToLowerInvariant().Contains(q) ?? false)))
+            bool contains(string? value) => !string.IsNullOrWhiteSpace(value) && value.Contains(q, StringComparison.OrdinalIgnoreCase);
+
+            if (!(contains(item.ModName) ||
+                  contains(item.ModelKey) ||
+                  contains(item.ConfigKey) ||
+                  contains(item.VehicleName) ||
+                  contains(item.Brand) ||
+                  contains(item.Configuration) ||
+                  contains(item.ConfigType) ||
+                  contains(item.BodyStyle) ||
+                  contains(item.Type) ||
+                  contains(item.Country) ||
+                  contains(item.InsuranceClass) ||
+                  contains(item.ContentCategory) ||
+                  contains(item.SourceHintMake) ||
+                  contains(item.SourceHintModel) ||
+                  contains(item.LastAutoFillStatus) ||
+                  contains(item.LastAutoFillSource)))
             {
                 return false;
             }
@@ -354,25 +2057,8 @@ public partial class MainWindow : MetroWindow
 
     private void SearchTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        _searchCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _searchCts = cts;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await Task.Delay(200, cts.Token);
-                WpfApplication.Current?.Dispatcher.Invoke(() =>
-                {
-                    _configsView?.Refresh();
-                    UpdateEmptyState();
-                });
-            }
-            catch (TaskCanceledException)
-            {
-                // Ignore.
-            }
-        });
+        _searchRefreshTimer.Stop();
+        _searchRefreshTimer.Start();
     }
 
     private void FilterControl_Changed(object sender, RoutedEventArgs e)
@@ -414,13 +2100,14 @@ public partial class MainWindow : MetroWindow
         _configsView.SortDescriptions.Clear();
         if (MissingFirstCheckBox?.IsChecked == true)
         {
-            _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.HasMissing), ListSortDirection.Descending));
+            _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.NeedsReview), ListSortDirection.Descending));
+            _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.IsSuspicious), ListSortDirection.Descending));
         }
 
         _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.VehicleName), ListSortDirection.Ascending));
     }
 
-    private static void AddFolderModConfigs(string modDir, string modName, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
+    private void AddFolderModConfigs(string modDir, string modName, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
     {
         foreach (var filePath in Directory.EnumerateFiles(modDir, "info_*.json", SearchOption.AllDirectories))
         {
@@ -448,13 +2135,14 @@ public partial class MainWindow : MetroWindow
         }
     }
 
-    private static void AddZipModConfigs(string zipPath, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
+    private void AddZipModConfigs(string zipPath, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
     {
         var modName = Path.GetFileNameWithoutExtension(zipPath);
         try
         {
             using var archive = ZipFile.OpenRead(zipPath);
-            foreach (var entry in archive.Entries)
+            var scanContext = new ZipScanContext(archive);
+            foreach (var entry in scanContext.Entries)
             {
                 token.ThrowIfCancellationRequested();
                 if (!IsVehicleInfoEntry(entry.FullName))
@@ -464,7 +2152,7 @@ public partial class MainWindow : MetroWindow
 
                 using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
                 var jsonText = reader.ReadToEnd();
-                if (!TryCreateConfigItem(modName, zipPath, entry.FullName, true, jsonText, out var item))
+                if (!TryCreateConfigItem(modName, zipPath, entry.FullName, true, jsonText, out var item, scanContext))
                 {
                     errors++;
                     continue;
@@ -479,7 +2167,7 @@ public partial class MainWindow : MetroWindow
         }
     }
 
-    private static bool TryCreateConfigItem(string modName, string sourcePath, string infoPath, bool isZip, string jsonText, out VehicleConfigItem item)
+    private bool TryCreateConfigItem(string modName, string sourcePath, string infoPath, bool isZip, string jsonText, out VehicleConfigItem item, ZipScanContext? zipScanContext = null)
     {
         item = new VehicleConfigItem();
 
@@ -494,6 +2182,13 @@ public partial class MainWindow : MetroWindow
             return false;
         }
 
+        var vehicleInfoPath = BuildVehicleInfoPath(infoPath, isZip);
+        var vehicleRoot = TryLoadVehicleInfoRoot(sourcePath, vehicleInfoPath, isZip, zipScanContext);
+
+        var configPcPath = BuildConfigPcPath(infoPath, configKey);
+        var configPcExists = ConfigPcExists(sourcePath, configPcPath, isZip, zipScanContext);
+        var currentLicensePlate = TryReadLicensePlate(sourcePath, configPcPath, isZip, zipScanContext);
+
         item = new VehicleConfigItem
         {
             ModName = modName,
@@ -502,10 +2197,16 @@ public partial class MainWindow : MetroWindow
             IsZip = isZip,
             ModelKey = modelKey,
             ConfigKey = configKey,
-            Json = root
+            ConfigPcPath = configPcPath,
+            HasConfigPc = configPcExists,
+            CurrentLicensePlate = currentLicensePlate,
+            Json = root,
+            VehicleInfoJson = vehicleRoot,
+            VehicleInfoPath = vehicleInfoPath
         };
 
-        UpdateItemFromJson(item, root);
+        UpdateItemFromJson(item, root, vehicleRoot);
+        item.NotifyChanges();
         return true;
     }
 
@@ -520,6 +2221,69 @@ public partial class MainWindow : MetroWindow
         try
         {
             return JsonNode.Parse(jsonText, documentOptions: options);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+
+    private static string BuildConfigPcPath(string infoPath, string configKey)
+    {
+        var normalized = infoPath.Replace('\\', '/');
+        var slashIndex = normalized.LastIndexOf('/');
+        if (slashIndex < 0)
+        {
+            return configKey + ".pc";
+        }
+
+        return normalized.Substring(0, slashIndex + 1) + configKey + ".pc";
+    }
+
+    private static bool ConfigPcExists(string sourcePath, string configPcPath, bool isZip, ZipScanContext? zipScanContext = null)
+    {
+        try
+        {
+            if (!isZip)
+            {
+                return File.Exists(configPcPath.Replace('/', Path.DirectorySeparatorChar));
+            }
+
+            return zipScanContext?.Contains(configPcPath) ?? false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string? TryReadLicensePlate(string sourcePath, string configPcPath, bool isZip, ZipScanContext? zipScanContext = null)
+    {
+        try
+        {
+            string? jsonText;
+            if (!isZip)
+            {
+                var filePath = configPcPath.Replace('/', Path.DirectorySeparatorChar);
+                if (!File.Exists(filePath))
+                {
+                    return null;
+                }
+
+                jsonText = File.ReadAllText(filePath);
+            }
+            else
+            {
+                jsonText = zipScanContext?.ReadText(configPcPath);
+                if (jsonText == null)
+                {
+                    return null;
+                }
+            }
+
+            var root = ParseJson(jsonText ?? string.Empty);
+            return ReadString(root, "licenseName");
         }
         catch
         {
@@ -548,6 +2312,8 @@ public partial class MainWindow : MetroWindow
         
         UpdateFieldHighlightingFromMissing(missing);
         UpdateSummary(item);
+        SelectedModInfoTextBlock.Text = $"Selected mod: {item.ModName} · Config: {item.ConfigKey}";
+        RefreshLicensePlatesPageSummary();
         _isLoadingForm = false;
     }
 
@@ -569,8 +2335,10 @@ public partial class MainWindow : MetroWindow
 
         PopulationPresetComboBox.SelectedIndex = 0;
         ConfigSummaryText.Text = string.Empty;
+        SelectedModInfoTextBlock.Text = "Select a config to enable config-only and mod-wide actions.";
         ResetFieldHighlighting();
         SetDirty(false);
+        RefreshLicensePlatesPageSummary();
         _isLoadingForm = false;
     }
 
@@ -594,13 +2362,13 @@ public partial class MainWindow : MetroWindow
         var insuranceClass = GetSelectedInsuranceClass();
 
         var errors = new List<string>();
-        if (string.IsNullOrWhiteSpace(brand)) errors.Add("Brand");
-        if (string.IsNullOrWhiteSpace(country)) errors.Add("Country");
-        if (string.IsNullOrWhiteSpace(type)) errors.Add("Type");
-        if (string.IsNullOrWhiteSpace(bodyStyle)) errors.Add("Body Style");
-        if (string.IsNullOrWhiteSpace(configType)) errors.Add("Config Type");
-        if (string.IsNullOrWhiteSpace(configuration)) errors.Add("Configuration");
-        if (string.IsNullOrWhiteSpace(insuranceClass)) errors.Add("Insurance Class");
+        if (VehicleConfigItem.IsMissingText(brand)) errors.Add("Brand");
+        if (VehicleConfigItem.IsMissingText(country)) errors.Add("Country");
+        if (VehicleConfigItem.IsMissingText(type)) errors.Add("Type");
+        if (VehicleConfigItem.IsMissingText(bodyStyle)) errors.Add("Body Style");
+        if (VehicleConfigItem.IsMissingText(configType)) errors.Add("Config Type");
+        if (VehicleConfigItem.IsMissingText(configuration)) errors.Add("Configuration");
+        if (VehicleConfigItem.IsMissingText(insuranceClass)) errors.Add("Insurance Class");
 
         var yearMin = ReadInteger(YearMinUpDown.Value);
         if (!yearMin.HasValue)
@@ -620,7 +2388,7 @@ public partial class MainWindow : MetroWindow
         }
 
         var value = ValueUpDown.Value;
-        if (!value.HasValue)
+        if (!value.HasValue || value.Value <= 0)
         {
             errors.Add("Value");
         }
@@ -660,36 +2428,86 @@ public partial class MainWindow : MetroWindow
         return true;
     }
 
-    private static void UpdateItemFromJson(VehicleConfigItem item, JsonNode root)
+    private static void UpdateItemFromJson(VehicleConfigItem item, JsonNode root, JsonNode? vehicleRoot = null)
     {
-        item.VehicleName = ReadString(root, "Name") ?? ReadString(root, "Configuration") ?? item.ConfigKey;
-        item.Brand = ReadStringOrAggregate(root, "Brand");
-        item.Country = ReadStringOrAggregate(root, "Country");
-        item.Type = ReadStringOrAggregate(root, "Type");
-        item.BodyStyle = ReadStringOrAggregate(root, "Body Style");
+        if (vehicleRoot != null)
+        {
+            item.VehicleInfoJson = vehicleRoot;
+        }
+
+        var effectiveVehicleRoot = vehicleRoot ?? item.VehicleInfoJson;
+        item.VehicleInfoName = ReadString(effectiveVehicleRoot, "Name");
+        item.VehicleInfoBrand = ReadStringOrAggregate(effectiveVehicleRoot, "Brand");
+        item.VehicleInfoCountry = ReadStringOrAggregate(effectiveVehicleRoot, "Country");
+        item.VehicleInfoType = ReadStringOrAggregate(effectiveVehicleRoot, "Type");
+        item.VehicleInfoBodyStyle = ReadStringOrAggregate(effectiveVehicleRoot, "Body Style");
+
+        var vehicleYears = ReadYears(effectiveVehicleRoot);
+        item.VehicleInfoYearMin = vehicleYears.min;
+        item.VehicleInfoYearMax = vehicleYears.max;
+
+        item.VehicleName = ReadString(root, "Name") ?? item.VehicleInfoName ?? ReadString(root, "Configuration") ?? item.ConfigKey;
+        item.Brand = ReadStringOrAggregate(root, "Brand") ?? item.VehicleInfoBrand;
+        item.Country = ReadStringOrAggregate(root, "Country") ?? item.VehicleInfoCountry;
+        item.Type = ReadStringOrAggregate(root, "Type") ?? item.VehicleInfoType;
+        item.BodyStyle = ReadStringOrAggregate(root, "Body Style") ?? item.VehicleInfoBodyStyle;
         item.ConfigType = ReadStringOrAggregate(root, "Config Type");
         item.Configuration = ReadString(root, "Configuration");
         item.InsuranceClass = ReadStringOrAggregate(root, "InsuranceClass") ?? DefaultInsuranceClass;
 
         var years = ReadYears(root);
-        item.YearMin = years.min;
-        item.YearMax = years.max;
+        item.YearMin = years.min ?? vehicleYears.min;
+        item.YearMax = years.max ?? vehicleYears.max;
 
         item.Value = ReadDouble(root, "Value");
         item.Population = ReadInt(root, "Population");
+    }
+
+    private static string BuildVehicleInfoPath(string configInfoPath, bool isZip)
+    {
+        if (isZip)
+        {
+            var normalized = configInfoPath.Replace('\\', '/');
+            var slash = normalized.LastIndexOf('/');
+            if (slash >= 0)
+            {
+                return normalized.Substring(0, slash + 1) + "info.json";
+            }
+            return "info.json";
+        }
+
+        var dir = Path.GetDirectoryName(configInfoPath) ?? string.Empty;
+        return Path.Combine(dir, "info.json");
+    }
+
+    private static JsonNode? TryLoadVehicleInfoRoot(string sourcePath, string vehicleInfoPath, bool isZip, ZipScanContext? zipScanContext = null)
+    {
+        try
+        {
+            if (!isZip)
+            {
+                return File.Exists(vehicleInfoPath) ? ParseJson(File.ReadAllText(vehicleInfoPath)) : null;
+            }
+
+            return zipScanContext?.ReadJson(vehicleInfoPath);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void UpdateMissingFromForm()
     {
         var missing = new List<string>();
 
-        if (string.IsNullOrWhiteSpace(BrandTextBox.Text)) missing.Add("Brand");
-        if (string.IsNullOrWhiteSpace(CountryTextBox.Text)) missing.Add("Country");
-        if (string.IsNullOrWhiteSpace(TypeTextBox.Text)) missing.Add("Type");
-        if (string.IsNullOrWhiteSpace(BodyStyleTextBox.Text)) missing.Add("Body Style");
-        if (string.IsNullOrWhiteSpace(ConfigTypeTextBox.Text)) missing.Add("Config Type");
-        if (string.IsNullOrWhiteSpace(ConfigurationTextBox.Text)) missing.Add("Configuration");
-        if (string.IsNullOrWhiteSpace(GetSelectedInsuranceClass())) missing.Add("Insurance Class");
+        if (VehicleConfigItem.IsMissingText(BrandTextBox.Text)) missing.Add("Brand");
+        if (VehicleConfigItem.IsMissingText(CountryTextBox.Text)) missing.Add("Country");
+        if (VehicleConfigItem.IsMissingText(TypeTextBox.Text)) missing.Add("Type");
+        if (VehicleConfigItem.IsMissingText(BodyStyleTextBox.Text)) missing.Add("Body Style");
+        if (VehicleConfigItem.IsMissingText(ConfigTypeTextBox.Text)) missing.Add("Config Type");
+        if (VehicleConfigItem.IsMissingText(ConfigurationTextBox.Text)) missing.Add("Configuration");
+        if (VehicleConfigItem.IsMissingText(GetSelectedInsuranceClass())) missing.Add("Insurance Class");
 
         if (!ReadInteger(YearMinUpDown.Value).HasValue)
         {
@@ -701,12 +2519,13 @@ public partial class MainWindow : MetroWindow
             if (!missing.Contains("Years")) missing.Add("Years");
         }
 
-        if (!ValueUpDown.Value.HasValue)
+        if (!ValueUpDown.Value.HasValue || ValueUpDown.Value.Value <= 0)
         {
             missing.Add("Value");
         }
 
-        if (!ReadInteger(PopulationUpDown.Value).HasValue)
+        var populationValue = ReadInteger(PopulationUpDown.Value);
+        if (!populationValue.HasValue || populationValue.Value <= 0)
         {
             missing.Add("Population");
         }
@@ -872,9 +2691,17 @@ public partial class MainWindow : MetroWindow
             ThemeToggleSwitch.IsOn = persisted?.IsDarkTheme ?? false;
             BackupToggleSwitch.IsOn = persisted?.BackupBeforeSave ?? false;
             VehiclesToggleSwitch.IsOn = persisted?.InputIntoVehicles ?? false;
+            _accentColorName = string.IsNullOrWhiteSpace(persisted?.AccentColorName) ? "Blue" : persisted!.AccentColorName!;
+            _defaultStartupPage = string.IsNullOrWhiteSpace(persisted?.DefaultStartupPage) ? "Dashboard" : persisted!.DefaultStartupPage!;
+            _reopenLastModsFolderOnStartup = persisted?.ReopenLastModsFolderOnStartup ?? true;
+            _holdWeakMatchesForReview = persisted?.HoldWeakMatchesForReview ?? true;
+            _openReviewQueueAfterAutoFill = persisted?.OpenReviewAfterAutoFill ?? false;
+            _lookupTimeoutSeconds = Math.Clamp(persisted?.LookupTimeoutSeconds ?? 8, 3, 30);
 
             ApplyTheme(ThemeToggleSwitch.IsOn);
             LoadAutoFillSettingsIntoUi();
+            SyncExtendedSettingsPageFromState();
+            RealVehiclePricingService.ConfigureLookupTimeoutSeconds(_lookupTimeoutSeconds);
         }
         finally
         {
@@ -923,6 +2750,13 @@ public partial class MainWindow : MetroWindow
                 IsDarkTheme = ThemeToggleSwitch?.IsOn == true,
                 BackupBeforeSave = BackupToggleSwitch?.IsOn == true,
                 InputIntoVehicles = VehiclesToggleSwitch?.IsOn == true,
+                AccentColorName = _accentColorName,
+                DefaultStartupPage = _defaultStartupPage,
+                ReopenLastModsFolderOnStartup = _reopenLastModsFolderOnStartup,
+                HoldWeakMatchesForReview = _holdWeakMatchesForReview,
+                OpenReviewAfterAutoFill = _openReviewQueueAfterAutoFill,
+                LookupTimeoutSeconds = _lookupTimeoutSeconds,
+                LastModsPath = ModsPathTextBox?.Text?.Trim() ?? string.Empty,
                 AutoFill = _autoFillSettings.Clone()
             };
 
@@ -941,23 +2775,8 @@ public partial class MainWindow : MetroWindow
 
     private void AutoFillSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (HelpPopup.IsOpen)
-        {
-            HelpPopup.IsOpen = false;
-        }
-
         LoadAutoFillSettingsIntoUi();
         AutoFillSettingsPopup.IsOpen = !AutoFillSettingsPopup.IsOpen;
-    }
-
-    private void HelpButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (AutoFillSettingsPopup.IsOpen)
-        {
-            AutoFillSettingsPopup.IsOpen = false;
-        }
-
-        HelpPopup.IsOpen = !HelpPopup.IsOpen;
     }
 
     private void AutoFillSettingsSave_Click(object sender, RoutedEventArgs e)
@@ -1107,6 +2926,1048 @@ public partial class MainWindow : MetroWindow
         AutoPopulationCheckBox.IsChecked = _autoFillSettings.UsePopulation;
     }
 
+
+    private void WorkspaceNavButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isScanning || _isAutoFillAllRunning)
+        {
+            StatusTextBlock.Text = _isScanning ? "Wait for the scan to finish before switching pages." : "Wait for Auto Fill All to finish before switching pages.";
+            return;
+        }
+
+        if (sender is System.Windows.Controls.Button button && button.Tag is string page)
+        {
+            SetWorkspacePage(page);
+        }
+    }
+
+    private void OpenResultsPage_Click(object sender, RoutedEventArgs e) => SetWorkspacePage("Results");
+
+    private void OpenReviewQueuePage_Click(object sender, RoutedEventArgs e) => SetWorkspacePage("ReviewQueue");
+
+    private void OpenRenamerPage_Click(object sender, RoutedEventArgs e) => SetWorkspacePage("Renamer");
+
+    private async void OpenRenamerWizardAgain_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var reviewOutcome = await RunRenamerWizardIfNeededAsync();
+            RefreshWorkspaceSummary();
+            RefreshWorkspacePageSummaries();
+            RefreshSettingsPageSummary();
+
+            if (reviewOutcome.ReviewedCount > 0 || reviewOutcome.IgnoredCount > 0 || reviewOutcome.RetriedCount > 0)
+            {
+                AppendScrapeLog($"MANUAL REVIEW outcome :: retried={reviewOutcome.RetriedCount} ignored={reviewOutcome.IgnoredCount} reviewed={reviewOutcome.ReviewedCount}");
+            }
+            else
+            {
+                System.Windows.MessageBox.Show("There are no unresolved mods waiting for the review wizard right now.", "Review Wizard", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendScrapeLog($"Manual renamer launch failed: {ex}");
+            System.Windows.MessageBox.Show(ex.Message, "Review Wizard", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void OpenAutoFillSettingsFromPage_Click(object sender, RoutedEventArgs e)
+    {
+        AutoFillSettingsPopup.IsOpen = false;
+        AutoFillSettingsPopup.PlacementTarget = OpenAutoFillSettingsFromPageButton;
+        AutoFillSettingsPopup.IsOpen = true;
+    }
+
+    private void SettingsThemeToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        ThemeToggleSwitch.IsOn = SettingsThemeToggleSwitch.IsOn;
+    }
+
+    private void SettingsBackupToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        BackupToggleSwitch.IsOn = SettingsBackupToggleSwitch.IsOn;
+    }
+
+    private void SettingsVehiclesToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        VehiclesToggleSwitch.IsOn = SettingsVehiclesToggleSwitch.IsOn;
+    }
+
+    private void SyncSettingsPageFromMain()
+    {
+        _suppressSettingsSave = true;
+        SettingsThemeToggleSwitch.IsOn = ThemeToggleSwitch.IsOn;
+        SettingsBackupToggleSwitch.IsOn = BackupToggleSwitch.IsOn;
+        SettingsVehiclesToggleSwitch.IsOn = VehiclesToggleSwitch.IsOn;
+        SyncExtendedSettingsPageFromState();
+        _suppressSettingsSave = false;
+    }
+
+    private void SyncExtendedSettingsPageFromState()
+    {
+        SelectComboBoxItemByTag(SettingsAccentColorComboBox, _accentColorName);
+        SelectComboBoxItemByTag(SettingsStartupPageComboBox, _defaultStartupPage);
+        SettingsReopenLastFolderToggleSwitch.IsOn = _reopenLastModsFolderOnStartup;
+        SettingsHoldWeakMatchesToggleSwitch.IsOn = _holdWeakMatchesForReview;
+        SettingsOpenReviewAfterAutoFillToggleSwitch.IsOn = _openReviewQueueAfterAutoFill;
+        SettingsLookupTimeoutUpDown.Value = _lookupTimeoutSeconds;
+    }
+
+    private static void SelectComboBoxItemByTag(System.Windows.Controls.ComboBox comboBox, string tag)
+    {
+        if (comboBox == null) return;
+        foreach (var item in comboBox.Items)
+        {
+            if (item is System.Windows.Controls.ComboBoxItem comboBoxItem && string.Equals(comboBoxItem.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase))
+            {
+                comboBox.SelectedItem = comboBoxItem;
+                return;
+            }
+        }
+
+        if (comboBox.Items.Count > 0 && comboBox.SelectedIndex < 0)
+        {
+            comboBox.SelectedIndex = 0;
+        }
+    }
+
+
+    private void ResetSettingsDefaultsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (System.Windows.MessageBox.Show(this,
+                "Reset the Settings page options back to their default values?",
+                "Reset Settings",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _suppressSettingsSave = true;
+        try
+        {
+            ThemeToggleSwitch.IsOn = false;
+            BackupToggleSwitch.IsOn = false;
+            VehiclesToggleSwitch.IsOn = false;
+
+            _accentColorName = "Blue";
+            _defaultStartupPage = "Dashboard";
+            _reopenLastModsFolderOnStartup = true;
+            _holdWeakMatchesForReview = true;
+            _openReviewQueueAfterAutoFill = false;
+            _lookupTimeoutSeconds = 8;
+
+            ApplyTheme(false);
+            SyncSettingsPageFromMain();
+            SyncExtendedSettingsPageFromState();
+            RealVehiclePricingService.ConfigureLookupTimeoutSeconds(_lookupTimeoutSeconds);
+        }
+        finally
+        {
+            _suppressSettingsSave = false;
+        }
+
+        SavePersistedSettings();
+        StatusTextBlock.Text = "Settings page defaults restored.";
+        StatusDetailTextBlock.Text = "Default application and workflow preferences were reapplied.";
+        DashboardRecentActivityTextBlock.Text = StatusTextBlock.Text + Environment.NewLine + StatusDetailTextBlock.Text;
+    }
+
+    private void SettingsAccentColorComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        if (SettingsAccentColorComboBox.SelectedItem is ComboBoxItem item && !string.IsNullOrWhiteSpace(item.Tag?.ToString()))
+        {
+            _accentColorName = item.Tag!.ToString()!;
+            ApplyTheme(ThemeToggleSwitch.IsOn);
+            SavePersistedSettings();
+        }
+    }
+
+    private void SettingsStartupPageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        if (SettingsStartupPageComboBox.SelectedItem is ComboBoxItem item && !string.IsNullOrWhiteSpace(item.Tag?.ToString()))
+        {
+            _defaultStartupPage = item.Tag!.ToString()!;
+            SavePersistedSettings();
+        }
+    }
+
+    private void SettingsReopenLastFolderToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        _reopenLastModsFolderOnStartup = SettingsReopenLastFolderToggleSwitch.IsOn;
+        SavePersistedSettings();
+    }
+
+    private void SettingsHoldWeakMatchesToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        _holdWeakMatchesForReview = SettingsHoldWeakMatchesToggleSwitch.IsOn;
+        SavePersistedSettings();
+    }
+
+    private void SettingsOpenReviewAfterAutoFillToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressSettingsSave) return;
+        _openReviewQueueAfterAutoFill = SettingsOpenReviewAfterAutoFillToggleSwitch.IsOn;
+        SavePersistedSettings();
+    }
+
+    private void SettingsLookupTimeoutUpDown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double?> e)
+    {
+        if (_suppressSettingsSave) return;
+        var timeout = Math.Clamp((int)Math.Round(e.NewValue ?? 8d), 3, 30);
+        _lookupTimeoutSeconds = timeout;
+        RealVehiclePricingService.ConfigureLookupTimeoutSeconds(timeout);
+        SavePersistedSettings();
+    }
+
+    private List<SourceReviewEntry> BuildRenamerEntriesSafe()
+    {
+        try
+        {
+            return BuildRenamerEntries();
+        }
+        catch (Exception ex)
+        {
+            AppendScrapeLog($"Renamer queue rebuild failed: {ex}");
+            return new List<SourceReviewEntry>();
+        }
+    }
+
+
+    private void RefreshFlaggedConfigsCollection()
+    {
+        FlaggedConfigs.Clear();
+        foreach (var item in Configs.Where(x => x.NeedsReview)
+                     .OrderByDescending(x => x.IsSuspicious)
+                     .ThenByDescending(x => x.HasMissing)
+                     .ThenBy(x => x.ModName)
+                     .ThenBy(x => x.VehicleName))
+        {
+            FlaggedConfigs.Add(item);
+        }
+    }
+
+    private void RefreshWorkspaceSummary()
+    {
+        try
+        {
+            var missing = Configs.Count(x => x.HasMissing);
+            var suspicious = Configs.Count(x => x.IsSuspicious);
+            var review = Configs.Count(x => x.NeedsReview);
+            var uniqueMods = Configs
+                .Select(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            var uniqueBrands = Configs
+                .Select(x => NormalizeSummaryLabel(x.Brand, "Unknown"))
+                .Where(x => !string.Equals(x, "Unknown", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+
+            DashboardMissingCountTextBlock.Text = missing.ToString();
+            DashboardSuspiciousCountTextBlock.Text = suspicious.ToString();
+            DashboardReviewCountTextBlock.Text = review.ToString();
+            DashboardInstallSummaryTextBlock.Text = Configs.Count == 0
+                ? "Scan a repo to show how many unique mods, brands, and flagged items were detected."
+                : $"Loaded {Configs.Count} configs from {uniqueMods} unique mod(s) across {uniqueBrands} detected brand(s).";
+
+            DashboardBrandStats.Clear();
+            foreach (var stat in Configs
+                         .GroupBy(x => NormalizeSummaryLabel(x.Brand, "Unknown"), StringComparer.OrdinalIgnoreCase)
+                         .OrderByDescending(g => g.Count())
+                         .ThenBy(g => g.Key)
+                         .Take(10)
+                         .Select(g => new SummaryCountItem
+                         {
+                             Label = g.Key,
+                             Count = g.Count(),
+                             Sources = g.GroupBy(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName, StringComparer.OrdinalIgnoreCase)
+                                 .OrderByDescending(sg => sg.Count())
+                                 .ThenBy(sg => Path.GetFileName(sg.Key))
+                                 .Select(sg => new BrandSourceItem
+                                 {
+                                     DisplayName = Path.GetFileName(sg.Key),
+                                     SourcePath = sg.Key,
+                                     ConfigCount = sg.Count(),
+                                     ReviewCount = sg.Count(i => i.NeedsReview)
+                                 })
+                                 .ToList()
+                         }))
+            {
+                DashboardBrandStats.Add(stat);
+            }
+
+            DashboardIssueSummaryTextBlock.Text = BuildIssueSummaryText(missing, suspicious, review);
+
+            var renamerEntries = BuildRenamerEntriesSafe();
+            RenamerQueuedCountTextBlock.Text = renamerEntries.Count.ToString();
+            DashboardModsCountTextBlock.Text = uniqueMods.ToString();
+
+            var modLibraryItems = Configs
+                .GroupBy(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName, StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
+                {
+                    var displayName = Path.GetFileName(g.Key);
+                    var hasVehicle = g.Any(item => !item.IsMapMod);
+                    var hasMap = g.Any(item => item.IsMapMod);
+                    var category = hasVehicle && hasMap
+                        ? "Mixed"
+                        : hasMap
+                            ? "Map"
+                            : "Vehicle";
+
+                    return new ModLibraryItem
+                    {
+                        Label = string.IsNullOrWhiteSpace(displayName) ? g.Key : displayName,
+                        Count = g.Count(),
+                        ReviewCount = g.Count(item => item.NeedsReview),
+                        Category = category
+                    };
+                })
+                .OrderByDescending(item => item.ReviewCount)
+                .ThenByDescending(item => item.Count)
+                .ThenBy(item => item.Label)
+                .ToList();
+
+            ModLibraryItems.Clear();
+            foreach (var item in modLibraryItems)
+            {
+                ModLibraryItems.Add(item);
+            }
+
+            RenamerDetectedModsCountTextBlock.Text = uniqueMods.ToString();
+            RenamerVehicleModsCountTextBlock.Text = modLibraryItems.Count(item => item.Category is "Vehicle" or "Mixed").ToString();
+            RenamerMapModsCountTextBlock.Text = modLibraryItems.Count(item => item.Category is "Map" or "Mixed").ToString();
+            RenamerIgnoredCountTextBlock.Text = $"{Configs.Count(x => x.IgnoreFromRenamer)} mod(s) are currently ignored from review retry passes.";
+            RefreshFlaggedConfigsCollection();
+            ReviewQueueSummaryTextBlock.Text = review == 0
+                ? "Nothing is currently flagged. Run a scan or Auto Fill All to populate this list when needed."
+                : $"{review} config(s) currently need attention. Use this page to inspect individual missing or suspicious configs before making manual edits.";
+
+            FooterRepoStateTextBlock.Text = Configs.Count == 0
+                ? "Repo not loaded"
+                : $"Repo loaded · {uniqueMods} mods · {review} review";
+        }
+        catch (Exception ex)
+        {
+            AppendScrapeLog($"Workspace summary refresh failed: {ex}");
+        }
+    }
+
+    private void DashboardBrandStatsGrid_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (DashboardBrandStatsGrid.SelectedItem is not SummaryCountItem stat)
+        {
+            return;
+        }
+
+        var brand = NormalizeSummaryLabel(stat.Label, "Unknown");
+        var sources = Configs
+            .Where(x => string.Equals(NormalizeSummaryLabel(x.Brand, "Unknown"), brand, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => Path.GetFileName(g.Key))
+            .Select(g => new BrandSourceBreakdownItem
+            {
+                DisplayName = Path.GetFileName(g.Key),
+                SourcePath = g.Key,
+                ConfigCount = g.Count(),
+                ReviewCount = g.Count(i => i.NeedsReview),
+                ConfigNames = g.Select(i =>
+                        !string.IsNullOrWhiteSpace(i.VehicleName) ? i.VehicleName :
+                        !string.IsNullOrWhiteSpace(i.Configuration) ? i.Configuration :
+                        !string.IsNullOrWhiteSpace(i.ConfigKey) ? i.ConfigKey :
+                        i.ModelKey)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+            })
+            .ToList();
+
+        if (!sources.Any())
+        {
+            return;
+        }
+
+        var window = new BrandBreakdownWindow(brand, sources)
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        window.ShowDialog();
+        return;
+    }
+
+    private static string NormalizeSummaryLabel(string? value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+    }
+
+    private string BuildIssueSummaryText(int missing, int suspicious, int review)
+    {
+        if (Configs.Count == 0)
+        {
+            return "No issue mods recorded yet. Scan a mods repo to populate review and error summaries.";
+        }
+
+        var reviewReasons = Configs
+            .Select(x => !string.IsNullOrWhiteSpace(x.ReviewReason) ? x.ReviewReason!.Trim() : null)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .GroupBy(x => x!, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key)
+            .Take(3)
+            .Select(g => $"{g.Key} ({g.Count()})")
+            .ToList();
+
+        var autoFillIssues = Configs
+            .Select(x => !string.IsNullOrWhiteSpace(x.LastAutoFillStatus) ? x.LastAutoFillStatus!.Trim() : null)
+            .Where(x => !string.IsNullOrWhiteSpace(x) && x!.Contains("error", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(x => x!, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key)
+            .Take(2)
+            .Select(g => $"{g.Key} ({g.Count()})")
+            .ToList();
+
+        var combined = reviewReasons.Concat(autoFillIssues).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (combined.Count == 0)
+        {
+            return review == 0
+                ? "No active issue mods. Scan health currently looks clean."
+                : $"{review} review items remain, but no grouped issue reason text has been recorded yet.";
+        }
+
+        return $"Missing: {missing} · Suspicious: {suspicious} · Review: {review}\nTop issue mods: {string.Join("; ", combined)}";
+    }
+
+    private void RefreshWorkspacePageSummaries()
+    {
+        LogsSummaryTextBlock.Text = string.IsNullOrWhiteSpace(StatusTextBlock.Text)
+            ? "Operational logs, scan messages, autofill progress, and recent status updates are collected here."
+            : $"Latest status: {StatusTextBlock.Text}";
+
+        var pageLabel = _currentWorkspacePage switch
+        {
+            "Renamer" => "Mod Library",
+            "LicensePlates" => "License Plates",
+            _ => _currentWorkspacePage
+        };
+        FooterWorkspacePageTextBlock.Text = $"Page: {pageLabel}";
+    }
+
+    private void RefreshDataPageSummary()
+    {
+        try
+        {
+            var dataDir = Path.Combine(AppContext.BaseDirectory, "Data");
+            var makesPath = Path.Combine(dataDir, "makes.json");
+            var profilesPath = Path.Combine(dataDir, "vehicle-profiles.json");
+            var trimPath = Path.Combine(dataDir, "trim-keywords.json");
+            var pricingPath = Path.Combine(dataDir, "pricing-rules.json");
+
+            DataMakesCountTextBlock.Text = CountJsonArrayEntries(makesPath).ToString();
+            DataProfilesCountTextBlock.Text = CountJsonArrayEntries(profilesPath).ToString();
+            DataTrimKeywordsCountTextBlock.Text = CountJsonArrayEntries(trimPath).ToString();
+            DataPricingRulesCountTextBlock.Text = CountPricingRuleEntries(pricingPath).ToString();
+            DataFolderPathTextBlock.Text = dataDir;
+            var files = new[] { makesPath, profilesPath, trimPath, pricingPath };
+            var present = files.Count(File.Exists);
+            DataFilesStatusTextBlock.Text = $"{present}/{files.Length} required dataset files detected in the active Data folder.";
+        }
+        catch
+        {
+            DataMakesCountTextBlock.Text = "0";
+            DataProfilesCountTextBlock.Text = "0";
+            DataTrimKeywordsCountTextBlock.Text = "0";
+            DataPricingRulesCountTextBlock.Text = "0";
+            DataFolderPathTextBlock.Text = "Data folder unavailable.";
+            DataFilesStatusTextBlock.Text = "Dataset files could not be read.";
+        }
+
+        RefreshSettingsPageSummary();
+    }
+
+    private void RefreshSettingsPageSummary()
+    {
+        SettingsCurrentFolderTextBlock.Text = string.IsNullOrWhiteSpace(ModsPathTextBox.Text)
+            ? "Current mods folder: none selected."
+            : $"Current mods folder: {ModsPathTextBox.Text}";
+
+        var review = Configs.Count(x => x.NeedsReview);
+        SettingsReviewSummaryTextBlock.Text = review == 0
+            ? "Review status: clean. The current repo does not have flagged configs right now."
+            : $"Review status: {review} config(s) still need attention across missing or suspicious matches.";
+
+        SettingsDataSummaryTextBlock.Text = $"Data summary: {DataMakesCountTextBlock.Text} makes, {DataProfilesCountTextBlock.Text} profiles, {DataTrimKeywordsCountTextBlock.Text} trim keyword groups, {DataPricingRulesCountTextBlock.Text} pricing rules loaded.";
+    }
+
+    private void ReloadDataPageButton_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshDataPageSummary();
+        StatusTextBlock.Text = "Data page refreshed.";
+        StatusDetailTextBlock.Text = "Dataset counts were re-read from the active Data folder.";
+    }
+
+    private void OpenDataFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dataDir = Path.Combine(AppContext.BaseDirectory, "Data");
+        if (Directory.Exists(dataDir))
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = dataDir,
+                UseShellExecute = true
+            });
+        }
+        else
+        {
+            System.Windows.MessageBox.Show("The Data folder could not be found.", "Open Data Folder", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private static int CountJsonArrayEntries(string path)
+    {
+        if (!File.Exists(path)) return 0;
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.ValueKind == JsonValueKind.Array ? doc.RootElement.GetArrayLength() : 0;
+    }
+
+    private static int CountPricingRuleEntries(string path)
+    {
+        if (!File.Exists(path)) return 0;
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        if (doc.RootElement.ValueKind != JsonValueKind.Object) return 0;
+
+        var total = 0;
+        foreach (var prop in doc.RootElement.EnumerateObject())
+        {
+            if (prop.Value.ValueKind == JsonValueKind.Array)
+            {
+                total += prop.Value.GetArrayLength();
+            }
+            else if (prop.Value.ValueKind == JsonValueKind.Object)
+            {
+                total += prop.Value.EnumerateObject().Count();
+            }
+        }
+
+        return total;
+    }
+
+    private void SetWorkspaceNavigationEnabled(bool isEnabled)
+    {
+        DashboardNavButton.IsEnabled = isEnabled;
+        ResultsNavButton.IsEnabled = isEnabled;
+        ReviewQueueNavButton.IsEnabled = isEnabled;
+        RenamerNavButton.IsEnabled = isEnabled;
+        LicensePlatesNavButton.IsEnabled = isEnabled;
+        LogsNavButton.IsEnabled = isEnabled;
+        DataNavButton.IsEnabled = isEnabled;
+        SettingsNavButton.IsEnabled = isEnabled;
+    }
+
+    private void BuildLicensePlatesPageSelectionSources()
+    {
+        if (LicensePageModPickerComboBox == null || LicensePageConfigPickerListBox == null)
+        {
+            return;
+        }
+
+        var allConfigs = Configs.Where(x => x != null).OrderBy(x => x.ModName).ThenBy(x => x.ConfigKey).ToList();
+
+        _licensePageModChoices.Clear();
+        _licensePageModChoices.AddRange(allConfigs
+            .GroupBy(x => x.SourcePath ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new PlateModChoiceItem
+            {
+                SourcePath = g.Key,
+                ModName = g.FirstOrDefault()?.ModName ?? "Unknown mod",
+                ConfigCount = g.Count(),
+                DisplayLabel = $"{(g.FirstOrDefault()?.ModName ?? "Unknown mod")} ({g.Count()} config{(g.Count() == 1 ? string.Empty : "s")})"
+            })
+            .OrderBy(x => x.ModName, StringComparer.OrdinalIgnoreCase));
+
+        _licensePageConfigChoices.Clear();
+        _licensePageConfigChoices.AddRange(allConfigs.Select(item => new PlateConfigChoiceItem
+        {
+            Item = item,
+            DisplayLabel = $"{item.ModName} / {item.ConfigKey}"
+        }));
+
+        var previouslySelectedMod = _licensePageSelectedModSourcePath;
+        var previouslySelectedConfigs = _licensePageSelectedConfigKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        LicensePageModPickerComboBox.ItemsSource = null;
+        LicensePageModPickerComboBox.ItemsSource = _licensePageModChoices;
+        LicensePageConfigPickerListBox.ItemsSource = null;
+        LicensePageConfigPickerListBox.ItemsSource = _licensePageConfigChoices;
+
+        if (!string.IsNullOrWhiteSpace(previouslySelectedMod))
+        {
+            LicensePageModPickerComboBox.SelectedItem = _licensePageModChoices.FirstOrDefault(x => string.Equals(x.SourcePath, previouslySelectedMod, StringComparison.OrdinalIgnoreCase));
+        }
+
+        LicensePageConfigPickerListBox.SelectedItems.Clear();
+        foreach (var choice in _licensePageConfigChoices.Where(x => previouslySelectedConfigs.Contains(GetLicenseConfigSelectionKey(x.Item))))
+        {
+            LicensePageConfigPickerListBox.SelectedItems.Add(choice);
+        }
+    }
+
+    private string LicensePageSelectedScope => LicensePageConfigScopeRadioButton?.IsChecked == true ? "Config" : LicensePageModScopeRadioButton?.IsChecked == true ? "Mod" : LicensePageWorkspaceScopeRadioButton?.IsChecked == true ? "Workspace" : string.Empty;
+    private bool LicensePageClearMode => LicensePageClearPlateRadioButton?.IsChecked == true;
+    private string LicensePagePlateText => LicensePagePlateTextBox?.Text?.Trim() ?? string.Empty;
+    private PlateModChoiceItem? GetLicensePageSelectedModChoice() => LicensePageModPickerComboBox?.SelectedItem as PlateModChoiceItem;
+    private static string GetLicenseConfigSelectionKey(VehicleConfigItem item) => $"{item.SourcePath}|{item.ConfigKey}";
+
+    private IEnumerable<VehicleConfigItem> ResolveLicensePageTargetItems()
+    {
+        if (LicensePageConfigScopeRadioButton?.IsChecked == true)
+        {
+            return LicensePageConfigPickerListBox.SelectedItems.Cast<PlateConfigChoiceItem>().Select(x => x.Item).Distinct();
+        }
+        if (LicensePageModScopeRadioButton?.IsChecked == true)
+        {
+            var selectedMod = GetLicensePageSelectedModChoice();
+            if (selectedMod == null) return Enumerable.Empty<VehicleConfigItem>();
+            return Configs.Where(x => string.Equals(x.SourcePath, selectedMod.SourcePath, StringComparison.OrdinalIgnoreCase));
+        }
+        if (LicensePageWorkspaceScopeRadioButton?.IsChecked == true)
+        {
+            return Configs;
+        }
+        return Enumerable.Empty<VehicleConfigItem>();
+    }
+
+    private IReadOnlyList<VehicleConfigItem> ResolveLicensePageActionableItems()
+    {
+        var items = new List<VehicleConfigItem>();
+        var plateText = LicensePagePlateText;
+        foreach (var item in ResolveLicensePageTargetItems())
+        {
+            if (!item.HasConfigPc) continue;
+            if (LicensePageClearMode)
+            {
+                if (item.HasHardcodedPlate) items.Add(item);
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(plateText)) continue;
+            if (!string.Equals(item.CurrentLicensePlate ?? string.Empty, plateText, StringComparison.Ordinal)) items.Add(item);
+        }
+        return items;
+    }
+
+    private void RefreshLicensePageScopeSelectors()
+    {
+        var selectedScope = LicensePageSelectedScope;
+        var isMod = selectedScope == "Mod";
+        var isConfig = selectedScope == "Config";
+        var hasScope = !string.IsNullOrWhiteSpace(selectedScope);
+        var modReady = isMod && GetLicensePageSelectedModChoice() != null;
+        var configReady = isConfig && LicensePageConfigPickerListBox != null && LicensePageConfigPickerListBox.SelectedItems.Count > 0;
+        var workspaceReady = selectedScope == "Workspace";
+        var selectionReady = modReady || configReady || workspaceReady;
+
+        if (LicensePageModSelectionPanel != null)
+        {
+            LicensePageModSelectionPanel.Visibility = isMod ? Visibility.Visible : Visibility.Collapsed;
+            Grid.SetColumn(LicensePageModSelectionPanel, 0);
+            Grid.SetColumnSpan(LicensePageModSelectionPanel, 1);
+        }
+
+        if (LicensePageConfigSelectionPanel != null)
+        {
+            LicensePageConfigSelectionPanel.Visibility = isConfig ? Visibility.Visible : Visibility.Collapsed;
+            Grid.SetColumn(LicensePageConfigSelectionPanel, isConfig ? 0 : 2);
+            Grid.SetColumnSpan(LicensePageConfigSelectionPanel, isConfig ? 3 : 1);
+        }
+
+        if (LicensePageTargetSelectionBorder != null) LicensePageTargetSelectionBorder.Visibility = (isMod || isConfig) ? Visibility.Visible : Visibility.Collapsed;
+        if (LicensePageActionModeBorder != null) LicensePageActionModeBorder.Visibility = hasScope ? Visibility.Visible : Visibility.Collapsed;
+        if (LicensePageSummaryBorder != null) LicensePageSummaryBorder.Visibility = selectionReady ? Visibility.Visible : Visibility.Collapsed;
+        if (LicensePageFooterBorder != null) LicensePageFooterBorder.Visibility = selectionReady ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RefreshLicensePlatesPageUi()
+    {
+        if (_isRefreshingLicensePageUi || LicensePagePreviewSummaryTextBlock == null || LicensePageApplyButton == null || LicensePageFooterStatusTextBlock == null)
+        {
+            return;
+        }
+
+        _isRefreshingLicensePageUi = true;
+        try
+        {
+            if (LicensePageModPickerComboBox != null && LicensePageModPickerComboBox.SelectedItem is PlateModChoiceItem modChoice)
+            {
+                _licensePageSelectedModSourcePath = modChoice.SourcePath;
+            }
+            else if (LicensePageSelectedScope != "Mod")
+            {
+                _licensePageSelectedModSourcePath = null;
+            }
+
+            if (LicensePageConfigPickerListBox != null)
+            {
+                _licensePageSelectedConfigKeys.Clear();
+                foreach (var selected in LicensePageConfigPickerListBox.SelectedItems.OfType<PlateConfigChoiceItem>())
+                {
+                    _licensePageSelectedConfigKeys.Add(GetLicenseConfigSelectionKey(selected.Item));
+                }
+            }
+
+            BuildLicensePlatesPageSelectionSources();
+            RefreshLicensePageScopeSelectors();
+            _licensePagePreviewItems.Clear();
+
+            var selectedScope = LicensePageSelectedScope;
+            var selectionProblem = selectedScope switch
+            {
+                "" => "Choose Mod, Config, or Everything to begin.",
+                "Mod" when GetLicensePageSelectedModChoice() == null => "Choose a mod before continuing.",
+                "Config" when LicensePageConfigPickerListBox == null || LicensePageConfigPickerListBox.SelectedItems.Count == 0 => "Choose at least one config before continuing.",
+                _ => string.Empty
+            };
+
+            if (!string.IsNullOrWhiteSpace(selectionProblem))
+            {
+                LicensePagePreviewSummaryTextBlock.Text = selectionProblem;
+                LicensePageFooterStatusTextBlock.Text = "Pick what you want to update first, then the summary will show exactly what will be changed.";
+                LicensePageApplyButton.IsEnabled = false;
+                if (LicensePagePlateTextBox != null) LicensePagePlateTextBox.IsEnabled = !LicensePageClearMode && !string.IsNullOrWhiteSpace(selectedScope);
+                RefreshLicensePageScopeSelectors();
+                return;
+            }
+
+            var plateText = LicensePagePlateText;
+            var targetItems = ResolveLicensePageTargetItems().Where(x => x != null).OrderBy(x => x.ModName).ThenBy(x => x.ConfigKey).ToList();
+            var actionableCount = 0;
+            var missingPcCount = 0;
+            var alreadyOkayCount = 0;
+
+            foreach (var item in targetItems)
+            {
+                var currentPlate = string.IsNullOrWhiteSpace(item.CurrentLicensePlate) ? "(blank / dynamic)" : item.CurrentLicensePlate!;
+                var resultPlate = LicensePageClearMode ? "(blank / dynamic)" : (string.IsNullOrWhiteSpace(plateText) ? "(enter plate text)" : plateText);
+                string status;
+                if (!item.HasConfigPc)
+                {
+                    status = "No .pc file found";
+                    missingPcCount++;
+                }
+                else if (LicensePageClearMode)
+                {
+                    if (item.HasHardcodedPlate)
+                    {
+                        status = "Will remove hardcoded plate";
+                        actionableCount++;
+                    }
+                    else
+                    {
+                        status = "Already blank / dynamic";
+                        alreadyOkayCount++;
+                    }
+                }
+                else if (string.IsNullOrWhiteSpace(plateText))
+                {
+                    status = "Enter plate text to apply";
+                }
+                else if (string.Equals(item.CurrentLicensePlate ?? string.Empty, plateText, StringComparison.Ordinal))
+                {
+                    status = "Already set";
+                    alreadyOkayCount++;
+                }
+                else
+                {
+                    status = item.HasHardcodedPlate ? "Will replace hardcoded plate" : "Will add hardcoded plate";
+                    actionableCount++;
+                }
+                _licensePagePreviewItems.Add(new PlatePreviewItem { ModName = item.ModName, ConfigKey = item.ConfigKey, CurrentPlateDisplay = currentPlate, ResultPlateDisplay = resultPlate, Status = status });
+            }
+
+            var scopeLabel = selectedScope switch
+            {
+                "Config" => $"{targetItems.Count} selected config(s)",
+                "Mod" => GetLicensePageSelectedModChoice()?.DisplayLabel ?? "the selected mod",
+                _ => "everything in the workspace"
+            };
+
+            LicensePagePreviewSummaryTextBlock.Text = $"Ready to update {scopeLabel}. {actionableCount} change(s) are queued. {alreadyOkayCount} already match. {missingPcCount} do not have a .pc file available.";
+            LicensePageFooterStatusTextBlock.Text = LicensePageClearMode
+                ? "Remove mode deletes the hardcoded licenseName entry from each selected .pc file."
+                : "Set mode writes the same licenseName text to each selected .pc file.";
+
+            LicensePageApplyButton.IsEnabled = actionableCount > 0 && (LicensePageClearMode || !string.IsNullOrWhiteSpace(plateText));
+            if (LicensePagePlateTextBox != null) LicensePagePlateTextBox.IsEnabled = !LicensePageClearMode;
+            RefreshLicensePageScopeSelectors();
+        }
+        finally
+        {
+            _isRefreshingLicensePageUi = false;
+        }
+    }
+
+    private void LicensePageScopeRadioButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender == LicensePageModScopeRadioButton)
+        {
+            _licensePageSelectedConfigKeys.Clear();
+        }
+        else if (sender == LicensePageConfigScopeRadioButton)
+        {
+            _licensePageSelectedModSourcePath = null;
+        }
+        else
+        {
+            _licensePageSelectedModSourcePath = null;
+            _licensePageSelectedConfigKeys.Clear();
+        }
+        RefreshLicensePlatesPageUi();
+    }
+    private void LicensePageModeRadioButton_Checked(object sender, RoutedEventArgs e) => RefreshLicensePlatesPageUi();
+    private void LicensePagePlateTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        EnforcePlateTextLimit(LicensePagePlateTextBox);
+        RefreshLicensePlatesPageUi();
+    }
+    private void LicensePageModPickerComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (LicensePageModPickerComboBox?.SelectedItem is PlateModChoiceItem modChoice)
+        {
+            _licensePageSelectedModSourcePath = modChoice.SourcePath;
+        }
+        RefreshLicensePlatesPageUi();
+    }
+    private void LicensePageConfigPickerListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _licensePageSelectedConfigKeys.Clear();
+        if (LicensePageConfigPickerListBox != null)
+        {
+            foreach (var selected in LicensePageConfigPickerListBox.SelectedItems.OfType<PlateConfigChoiceItem>())
+            {
+                _licensePageSelectedConfigKeys.Add(GetLicenseConfigSelectionKey(selected.Item));
+            }
+        }
+        RefreshLicensePlatesPageUi();
+    }
+
+    private async void LicensePageApply_Click(object sender, RoutedEventArgs e)
+    {
+        var items = ResolveLicensePageActionableItems();
+        var scopeLabel = LicensePageSelectedScope switch
+        {
+            "Config" => "Selected config(s)",
+            "Mod" => GetLicensePageSelectedModChoice()?.DisplayLabel ?? "Selected mod",
+            _ => "Everything"
+        };
+        await ApplyLicensePlateChangesAsync(items, LicensePageClearMode, LicensePagePlateText, scopeLabel);
+        RefreshLicensePlatesPageUi();
+    }
+
+    private void RefreshLicensePlatesPageSummary()
+    {
+        if (LicensePagePreviewDataGrid != null && LicensePagePreviewDataGrid.ItemsSource == null)
+        {
+            LicensePagePreviewDataGrid.ItemsSource = _licensePagePreviewItems;
+        }
+
+        if (LicensePagePreviewSummaryTextBlock == null || LicensePageFooterStatusTextBlock == null)
+        {
+            return;
+        }
+
+        if (Configs.Count == 0)
+        {
+            LicensePagePreviewSummaryTextBlock.Text = "No repo loaded yet. Browse to a mods folder and run Scan before using the License Plates page.";
+            LicensePageFooterStatusTextBlock.Text = "Set mode writes the same licenseName text to each selected .pc file.";
+            return;
+        }
+
+        var uniqueMods = Configs
+            .Select(x => x.SourcePath ?? x.ModName)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        var selectionLine = _selected == null
+            ? "No config is currently selected in Configuration Editor. Config Plate stays config-specific after you select one."
+            : $"Current Configuration Editor selection: {_selected.ModName} / {_selected.ConfigKey}.";
+
+        LicensePagePreviewSummaryTextBlock.Text = $"Loaded {Configs.Count} config(s) across {uniqueMods} mod(s). {selectionLine}";
+        LicensePageFooterStatusTextBlock.Text = LicensePageClearMode
+            ? "Remove mode deletes the hardcoded licenseName entry from each selected .pc file."
+            : "Set mode writes the same licenseName text to each selected .pc file.";
+    }
+
+    private void RefreshLogsPage(bool forceFullReload = false)
+    {
+        try
+        {
+            var statusSnapshot = string.Join(Environment.NewLine, new[]
+            {
+                StatusTextBlock.Text,
+                StatusDetailTextBlock.Text
+            }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            if (!string.IsNullOrWhiteSpace(statusSnapshot))
+            {
+                DashboardRecentActivityTextBlock.Text = statusSnapshot;
+            }
+
+            if (!forceFullReload)
+            {
+                if (LogsPageTextBox != null && string.IsNullOrWhiteSpace(LogsPageTextBox.Text))
+                {
+                    LogsPageTextBox.Text = statusSnapshot;
+                }
+                return;
+            }
+
+            if (File.Exists(ScrapeLogPath))
+            {
+                LogsPageTextBox.Text = File.ReadAllText(ScrapeLogPath);
+                LogsPageTextBox.ScrollToEnd();
+                return;
+            }
+
+            LogsPageTextBox.Text = statusSnapshot;
+        }
+        catch (Exception ex)
+        {
+            AppendScrapeLog($"Log refresh failed: {ex}");
+        }
+    }
+
+    private void SetWorkspacePage(string page)
+    {
+        try
+        {
+            _currentWorkspacePage = page;
+
+            DashboardPage.Visibility = Visibility.Collapsed;
+            ResultsWorkspaceBorder.Visibility = Visibility.Collapsed;
+            InspectorBorder.Visibility = Visibility.Collapsed;
+            InspectorSplitter.Visibility = Visibility.Collapsed;
+            ReviewQueuePage.Visibility = Visibility.Collapsed;
+            RenamerPage.Visibility = Visibility.Collapsed;
+            LicensePlatesPage.Visibility = Visibility.Collapsed;
+            LogsPage.Visibility = Visibility.Collapsed;
+            DataPage.Visibility = Visibility.Collapsed;
+            SettingsPage.Visibility = Visibility.Collapsed;
+
+            switch (page)
+            {
+                case "Dashboard":
+                    DashboardPage.Visibility = Visibility.Visible;
+                    break;
+                case "Results":
+                    ResultsWorkspaceBorder.Visibility = Visibility.Visible;
+                    InspectorBorder.Visibility = Visibility.Visible;
+                    InspectorSplitter.Visibility = Visibility.Visible;
+                    break;
+                case "ReviewQueue":
+                    ReviewQueuePage.Visibility = Visibility.Visible;
+                    break;
+                case "Renamer":
+                    RenamerPage.Visibility = Visibility.Visible;
+                    break;
+                case "LicensePlates":
+                    LicensePlatesPage.Visibility = Visibility.Visible;
+                    break;
+                case "Logs":
+                    LogsPage.Visibility = Visibility.Visible;
+                    break;
+                case "Data":
+                    DataPage.Visibility = Visibility.Visible;
+                    break;
+                case "Settings":
+                    SettingsPage.Visibility = Visibility.Visible;
+                    break;
+                default:
+                    ResultsWorkspaceBorder.Visibility = Visibility.Visible;
+                    InspectorBorder.Visibility = Visibility.Visible;
+                    InspectorSplitter.Visibility = Visibility.Visible;
+                    _currentWorkspacePage = "Results";
+                    break;
+            }
+
+            ApplyWorkspaceNavStyle(DashboardNavButton, _currentWorkspacePage == "Dashboard");
+            ApplyWorkspaceNavStyle(ResultsNavButton, _currentWorkspacePage == "Results");
+            ApplyWorkspaceNavStyle(ReviewQueueNavButton, _currentWorkspacePage == "ReviewQueue");
+            ApplyWorkspaceNavStyle(RenamerNavButton, _currentWorkspacePage == "Renamer");
+            ApplyWorkspaceNavStyle(LicensePlatesNavButton, _currentWorkspacePage == "LicensePlates");
+            ApplyWorkspaceNavStyle(LogsNavButton, _currentWorkspacePage == "Logs");
+            ApplyWorkspaceNavStyle(DataNavButton, _currentWorkspacePage == "Data");
+            ApplyWorkspaceNavStyle(SettingsNavButton, _currentWorkspacePage == "Settings");
+
+            RefreshWorkspaceSummary();
+            RefreshWorkspacePageSummaries();
+            RefreshLicensePlatesPageSummary();
+            RefreshLogsPage();
+            SyncSettingsPageFromMain();
+            RefreshSettingsPageSummary();
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = "A page transition failed.";
+            StatusDetailTextBlock.Text = ex.Message;
+        }
+    }
+
+    private void LeftNavToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isLeftNavCollapsed = !_isLeftNavCollapsed;
+        ApplyLeftNavState();
+    }
+
+    private void ApplyLeftNavState()
+    {
+        if (LeftNavColumn is null || LeftNavSpacerColumn is null || NavigationRailBorder is null || LeftNavToggleButton is null)
+        {
+            return;
+        }
+
+        LeftNavColumn.Width = _isLeftNavCollapsed ? new GridLength(0) : _expandedLeftNavWidth;
+        LeftNavSpacerColumn.Width = _isLeftNavCollapsed ? new GridLength(0) : _expandedLeftNavSpacerWidth;
+        NavigationRailBorder.Visibility = _isLeftNavCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        LeftNavToggleButton.ToolTip = _isLeftNavCollapsed ? "Open navigation" : "Collapse navigation";
+        UpdateOverlayPageMargins();
+    }
+
+    private void UpdateOverlayPageMargins()
+    {
+        var left = _isLeftNavCollapsed ? 14d : 182d;
+        var pageMargin = new Thickness(left, 14, 14, 12);
+
+        if (DashboardPage is not null) DashboardPage.Margin = pageMargin;
+        if (ReviewQueuePage is not null) ReviewQueuePage.Margin = pageMargin;
+        if (RenamerPage is not null) RenamerPage.Margin = pageMargin;
+        if (LicensePlatesPage is not null) LicensePlatesPage.Margin = pageMargin;
+        if (LogsPage is not null) LogsPage.Margin = pageMargin;
+        if (DataPage is not null) DataPage.Margin = pageMargin;
+        if (SettingsPage is not null) SettingsPage.Margin = pageMargin;
+    }
+
+    private void ApplyWorkspaceNavStyle(System.Windows.Controls.Button button, bool isActive)
+    {
+        var key = isActive ? "NavigationButtonActiveStyle" : "NavigationButtonStyle";
+        if (FindResource(key) is Style style)
+        {
+            button.Style = style;
+        }
+    }
+
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 2)
@@ -1140,13 +4001,6 @@ public partial class MainWindow : MetroWindow
         if (e.Key == Key.Escape && AutoFillSettingsPopup.IsOpen)
         {
             AutoFillSettingsPopup.IsOpen = false;
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Key == Key.Escape && HelpPopup.IsOpen)
-        {
-            HelpPopup.IsOpen = false;
             e.Handled = true;
             return;
         }
@@ -1206,24 +4060,88 @@ public partial class MainWindow : MetroWindow
 
     private void ThemeToggleSwitch_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_suppressSettingsSave) return;
         ApplyTheme(ThemeToggleSwitch.IsOn);
+        SyncSettingsPageFromMain();
         SavePersistedSettings();
     }
 
     private void BackupToggleSwitch_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_suppressSettingsSave) return;
+        SyncSettingsPageFromMain();
         SavePersistedSettings();
     }
 
     private void VehiclesToggleSwitch_Toggled(object sender, RoutedEventArgs e)
     {
+        if (_suppressSettingsSave) return;
+        SyncSettingsPageFromMain();
         SavePersistedSettings();
     }
 
     private void ApplyTheme(bool isDark)
     {
-        ThemeManager.Current.ChangeTheme(this, isDark ? "Dark.Blue" : "Light.Blue");
+        ThemeManager.Current.ChangeTheme(this, isDark ? $"Dark.{_accentColorName}" : $"Light.{_accentColorName}");
         ReplaceThemeDictionary(isDark ? DarkThemeDictionaryUri : LightThemeDictionaryUri);
+        ApplyAccentPalette(_accentColorName, isDark);
+    }
+
+    private void ApplyAccentPalette(string accentName, bool isDark)
+    {
+        var accentColor = accentName?.ToLowerInvariant() switch
+        {
+            "green" => (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(isDark ? "#62DB8A" : "#1D7A3C"),
+            "purple" => (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(isDark ? "#B490FF" : "#7C4DFF"),
+            "orange" => (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(isDark ? "#FFB25B" : "#C96A00"),
+            "red" => (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(isDark ? "#FF7676" : "#B42318"),
+            _ => (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(isDark ? "#6AB8FF" : "#1F7DD6")
+        };
+
+        var accentForeground = isDark ? Colors.White : Colors.White;
+        var titleBarStart = isDark ? ParseColor("#14233A") : ParseColor("#D3DEEF");
+        var titleBarEnd = isDark ? ParseColor("#0F1B2E") : ParseColor("#F0F6FF");
+        var cardGlow = Blend(accentColor, isDark ? ParseColor("#18385C") : ParseColor("#D6E2F3"), isDark ? 0.48 : 0.20);
+        var shellOutline = Blend(accentColor, isDark ? ParseColor("#33547A") : ParseColor("#97AEC9"), isDark ? 0.38 : 0.18);
+        var accentPanelStart = Blend(accentColor, isDark ? ParseColor("#132238") : ParseColor("#F0F6FF"), isDark ? 0.34 : 0.14);
+        var accentPanelEnd = Blend(accentColor, isDark ? ParseColor("#0F1B2E") : ParseColor("#FCFEFF"), isDark ? 0.22 : 0.08);
+        var buttonBackground = Blend(accentColor, isDark ? ParseColor("#1A2940") : ParseColor("#DFE8F6"), isDark ? 0.18 : 0.08);
+        var hoverBackground = Blend(accentColor, isDark ? ParseColor("#1B2E47") : ParseColor("#E0EBFA"), isDark ? 0.26 : 0.14);
+        var statusBadge = Blend(accentColor, isDark ? ParseColor("#1E2F49") : ParseColor("#D4E2F6"), isDark ? 0.24 : 0.14);
+        var gridHeader = Blend(accentColor, isDark ? ParseColor("#16253C") : ParseColor("#CCDAEE"), isDark ? 0.22 : 0.12);
+
+        Resources["AccentBrush"] = CreateBrush(accentColor);
+        Resources["AccentForegroundBrush"] = CreateBrush(accentForeground);
+        Resources["TitleBarBackgroundBrush"] = CreateBrush(titleBarStart);
+        Resources["ButtonBackgroundBrush"] = CreateBrush(buttonBackground);
+        Resources["HoverBrush"] = CreateBrush(hoverBackground);
+        Resources["StatusBadgeBackgroundBrush"] = CreateBrush(statusBadge);
+        Resources["GridHeaderBackgroundBrush"] = CreateBrush(gridHeader);
+        Resources["CardGlowBrush"] = CreateBrush(cardGlow);
+        Resources["ShellOutlineBrush"] = CreateBrush(shellOutline);
+        Resources["TitleBarGradientBrush"] = new LinearGradientBrush(titleBarStart, titleBarEnd, 0);
+        Resources["AccentCardGradientBrush"] = new LinearGradientBrush(accentPanelStart, accentPanelEnd, 45);
+    }
+
+    private static SolidColorBrush CreateBrush(System.Windows.Media.Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private static System.Windows.Media.Color ParseColor(string hex)
+        => (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
+
+    private static System.Windows.Media.Color Blend(System.Windows.Media.Color source, System.Windows.Media.Color target, double amount)
+    {
+        amount = Math.Clamp(amount, 0, 1);
+        byte blend(byte from, byte to) => (byte)Math.Clamp((int)Math.Round(from + ((to - from) * amount)), 0, 255);
+        return System.Windows.Media.Color.FromArgb(
+            blend(source.A, target.A),
+            blend(source.R, target.R),
+            blend(source.G, target.G),
+            blend(source.B, target.B));
     }
 
     private static void ReplaceThemeDictionary(Uri themeDictionaryUri)
@@ -1267,7 +4185,7 @@ public partial class MainWindow : MetroWindow
 
     private static int? ReadInteger(double? value)
     {
-        if (!value.HasValue)
+        if (!value.HasValue || value.Value <= 0)
         {
             return null;
         }
@@ -1290,6 +4208,20 @@ public partial class MainWindow : MetroWindow
         else
         {
             SystemCommands.MaximizeWindow(this);
+        }
+    }
+
+    private void UpdateWindowChromeState()
+    {
+        RootGrid.Margin = WindowState == WindowState.Maximized ? new Thickness(8) : new Thickness(16);
+        if (MaxRestoreGlyph is not null)
+        {
+            MaxRestoreGlyph.Text = WindowState == WindowState.Maximized ? "❐" : "□";
+        }
+
+        if (MaxRestoreButton is not null)
+        {
+            MaxRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "Restore down" : "Maximize window";
         }
     }
 
@@ -1329,16 +4261,23 @@ public partial class MainWindow : MetroWindow
         public bool IsDarkTheme { get; set; }
         public bool BackupBeforeSave { get; set; }
         public bool InputIntoVehicles { get; set; }
+        public string AccentColorName { get; set; } = "Blue";
+        public string DefaultStartupPage { get; set; } = "Dashboard";
+        public bool ReopenLastModsFolderOnStartup { get; set; } = true;
+        public bool HoldWeakMatchesForReview { get; set; } = true;
+        public bool OpenReviewAfterAutoFill { get; set; }
+        public int LookupTimeoutSeconds { get; set; } = 8;
+        public string LastModsPath { get; set; } = string.Empty;
         public AutoFillSettings AutoFill { get; set; } = AutoFillSettings.CreateDefaults();
     }
 
     private sealed class AutoFillSettings
     {
-        public string Brand { get; set; } = "Custom";
-        public string Country { get; set; } = "United States";
+        public string Brand { get; set; } = string.Empty;
+        public string Country { get; set; } = string.Empty;
         public string Type { get; set; } = "Car";
-        public string BodyStyle { get; set; } = "Sedan";
-        public string ConfigType { get; set; } = "Custom";
+        public string BodyStyle { get; set; } = string.Empty;
+        public string ConfigType { get; set; } = "Factory";
         public int? Year { get; set; } = DateTime.Now.Year;
         public double Value { get; set; } = 5000;
         public int Population { get; set; } = 1000;
@@ -1477,9 +4416,77 @@ public partial class MainWindow : MetroWindow
         {
             UnsavedBadge.Visibility = _hasUnsavedChanges ? Visibility.Visible : Visibility.Collapsed;
         }
+
+        if (SaveChangesButton != null)
+        {
+            SaveChangesButton.IsEnabled = _hasUnsavedChanges && _selected != null;
+        }
     }
 
     private VehiclesMirrorResult WriteConfig(VehicleConfigItem item, string json)
+    {
+        WriteConfigBatch(new[]
+        {
+            new PendingConfigWrite
+            {
+                Item = item,
+                Json = json
+            }
+        }, mirrorToVehicles: false);
+
+        if (VehiclesToggleSwitch?.IsOn != true)
+        {
+            return VehiclesMirrorResult.NotRequested();
+        }
+
+        return MirrorConfigBundleToVehicles(item, json, ModsPathTextBox.Text.Trim());
+    }
+
+    private void WriteConfigBatch(IReadOnlyCollection<PendingConfigWrite> writes, bool mirrorToVehicles)
+    {
+        if (writes == null || writes.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var sourceGroup in writes.GroupBy(x => x.Item.SourcePath, StringComparer.OrdinalIgnoreCase))
+        {
+            var sourceWrites = sourceGroup.ToList();
+            var firstItem = sourceWrites[0].Item;
+            EnsureBackupExists(firstItem);
+
+            if (firstItem.IsZip)
+            {
+                var entryJsonMap = sourceWrites.ToDictionary(
+                    x => NormalizeZipEntryPath(x.Item.InfoPath),
+                    x => x.Json,
+                    StringComparer.OrdinalIgnoreCase);
+                var replacementNames = sourceWrites.ToDictionary(
+                    x => NormalizeZipEntryPath(x.Item.InfoPath),
+                    x => x.Item.InfoPath,
+                    StringComparer.OrdinalIgnoreCase);
+                WriteZipEntries(firstItem.SourcePath, entryJsonMap, replacementNames);
+            }
+            else
+            {
+                foreach (var write in sourceWrites)
+                {
+                    File.WriteAllText(write.Item.InfoPath, write.Json, new UTF8Encoding(false));
+                }
+            }
+
+            if (mirrorToVehicles && VehiclesToggleSwitch?.IsOn == true)
+            {
+                var modsPath = ModsPathTextBox.Text.Trim();
+                foreach (var write in sourceWrites)
+                {
+                    MirrorConfigBundleToVehicles(write.Item, write.Json, modsPath);
+                }
+            }
+        }
+    }
+
+    private void EnsureBackupExists(VehicleConfigItem item)
     {
         if (BackupToggleSwitch.IsOn)
         {
@@ -1490,22 +4497,6 @@ public partial class MainWindow : MetroWindow
                 File.Copy(backupTarget, backupPath);
             }
         }
-
-        if (item.IsZip)
-        {
-            WriteZipEntry(item.SourcePath, item.InfoPath, json);
-        }
-        else
-        {
-            File.WriteAllText(item.InfoPath, json, new UTF8Encoding(false));
-        }
-
-        if (VehiclesToggleSwitch?.IsOn != true)
-        {
-            return VehiclesMirrorResult.NotRequested();
-        }
-
-        return MirrorConfigBundleToVehicles(item, json, ModsPathTextBox.Text.Trim());
     }
 
     private VehiclesMirrorResult MirrorConfigBundleToVehicles(VehicleConfigItem item, string updatedInfoJson, string modsPath)
@@ -1837,15 +4828,120 @@ public partial class MainWindow : MetroWindow
         }
     }
 
+    private static ZipArchiveEntry? FindZipEntry(ZipArchive archive, string entryPath)
+    {
+        if (archive == null || string.IsNullOrWhiteSpace(entryPath))
+        {
+            return null;
+        }
+
+        var normalizedTarget = NormalizeZipEntryPath(entryPath);
+        return archive.Entries.FirstOrDefault(entry =>
+            string.Equals(NormalizeZipEntryPath(entry.FullName), normalizedTarget, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeZipEntryPath(string path)
+    {
+        return string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : path.Replace('\\', '/').TrimStart('/');
+    }
+
     private static void WriteZipEntry(string zipPath, string entryPath, string json)
     {
-        using var archive = ZipFile.Open(zipPath, ZipArchiveMode.Update);
-        var entry = archive.GetEntry(entryPath);
-        entry?.Delete();
+        WriteZipEntries(
+            zipPath,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [NormalizeZipEntryPath(entryPath)] = json
+            },
+            null);
+    }
 
-        var newEntry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
-        using var writer = new StreamWriter(newEntry.Open(), new UTF8Encoding(false));
-        writer.Write(json);
+    private static void WriteZipEntries(string zipPath, IReadOnlyDictionary<string, string> entryJsonMap, IReadOnlyDictionary<string, string>? replacementNames)
+    {
+        if (string.IsNullOrWhiteSpace(zipPath))
+        {
+            throw new ArgumentException("Zip path is required.", nameof(zipPath));
+        }
+
+        if (!File.Exists(zipPath))
+        {
+            throw new FileNotFoundException("Zip file not found.", zipPath);
+        }
+
+        if (entryJsonMap == null || entryJsonMap.Count == 0)
+        {
+            return;
+        }
+
+        var normalizedMap = entryJsonMap.ToDictionary(kvp => NormalizeZipEntryPath(kvp.Key), kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+        var zipDirectory = Path.GetDirectoryName(zipPath);
+        if (string.IsNullOrWhiteSpace(zipDirectory))
+        {
+            zipDirectory = Environment.CurrentDirectory;
+        }
+
+        var tempZipPath = Path.Combine(zipDirectory, Path.GetFileName(zipPath) + ".writing");
+        if (File.Exists(tempZipPath))
+        {
+            File.Delete(tempZipPath);
+        }
+
+        try
+        {
+            using (var sourceArchive = ZipFile.OpenRead(zipPath))
+            using (var tempArchive = ZipFile.Open(tempZipPath, ZipArchiveMode.Create))
+            {
+                var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var existingEntry in sourceArchive.Entries)
+                {
+                    var normalizedExisting = NormalizeZipEntryPath(existingEntry.FullName);
+                    if (normalizedMap.TryGetValue(normalizedExisting, out var replacementJson))
+                    {
+                        var replacementEntryName = replacementNames != null && replacementNames.TryGetValue(normalizedExisting, out var knownName)
+                            ? knownName
+                            : existingEntry.FullName;
+                        var replacementEntry = tempArchive.CreateEntry(replacementEntryName, CompressionLevel.Optimal);
+                        replacementEntry.LastWriteTime = DateTimeOffset.Now;
+                        using var replacementWriter = new StreamWriter(replacementEntry.Open(), new UTF8Encoding(false));
+                        replacementWriter.Write(replacementJson);
+                        written.Add(normalizedExisting);
+                        continue;
+                    }
+
+                    var copiedEntry = tempArchive.CreateEntry(existingEntry.FullName, CompressionLevel.Optimal);
+                    copiedEntry.LastWriteTime = existingEntry.LastWriteTime;
+                    using var sourceStream = existingEntry.Open();
+                    using var targetStream = copiedEntry.Open();
+                    sourceStream.CopyTo(targetStream);
+                }
+
+                foreach (var pending in normalizedMap.Where(kvp => !written.Contains(kvp.Key)))
+                {
+                    var pendingName = replacementNames != null && replacementNames.TryGetValue(pending.Key, out var knownName)
+                        ? knownName
+                        : pending.Key;
+                    var newEntry = tempArchive.CreateEntry(pendingName, CompressionLevel.Optimal);
+                    newEntry.LastWriteTime = DateTimeOffset.Now;
+                    using var writer = new StreamWriter(newEntry.Open(), new UTF8Encoding(false));
+                    writer.Write(pending.Value);
+                }
+            }
+
+            File.Delete(zipPath);
+            File.Move(tempZipPath, zipPath);
+        }
+        catch
+        {
+            if (File.Exists(tempZipPath))
+            {
+                File.Delete(tempZipPath);
+            }
+
+            throw;
+        }
     }
 
     private string ReadConfigText(VehicleConfigItem item)
@@ -1856,7 +4952,7 @@ public partial class MainWindow : MetroWindow
         }
 
         using var archive = ZipFile.OpenRead(item.SourcePath);
-        var entry = archive.GetEntry(item.InfoPath);
+        var entry = FindZipEntry(archive, item.InfoPath);
         if (entry == null)
         {
             throw new FileNotFoundException("Entry not found in zip.", item.InfoPath);
@@ -1926,8 +5022,13 @@ public partial class MainWindow : MetroWindow
         return true;
     }
 
-    private static (int? min, int? max) ReadYears(JsonNode root)
+    private static (int? min, int? max) ReadYears(JsonNode? root)
     {
+        if (root == null)
+        {
+            return (null, null);
+        }
+
         var years = root["Years"] as JsonObject ?? root["aggregates"]?["Years"] as JsonObject;
         if (years == null)
         {
@@ -1939,8 +5040,13 @@ public partial class MainWindow : MetroWindow
         return (min, max);
     }
 
-    private static string? ReadString(JsonNode root, string key)
+    private static string? ReadString(JsonNode? root, string key)
     {
+        if (root == null)
+        {
+            return null;
+        }
+
         if (root[key] is JsonValue val && val.TryGetValue<string>(out var result))
         {
             return result;
@@ -1949,8 +5055,13 @@ public partial class MainWindow : MetroWindow
         return null;
     }
 
-    private static string? ReadStringOrAggregate(JsonNode root, string key)
+    private static string? ReadStringOrAggregate(JsonNode? root, string key)
     {
+        if (root == null)
+        {
+            return null;
+        }
+
         var direct = ReadString(root, key);
         if (!string.IsNullOrWhiteSpace(direct))
         {
@@ -1973,8 +5084,13 @@ public partial class MainWindow : MetroWindow
         return null;
     }
 
-    private static double? ReadDouble(JsonNode root, string key)
+    private static double? ReadDouble(JsonNode? root, string key)
     {
+        if (root == null)
+        {
+            return null;
+        }
+
         if (root[key] is JsonValue val && val.TryGetValue<double>(out var result))
         {
             return result;
@@ -1983,8 +5099,13 @@ public partial class MainWindow : MetroWindow
         return null;
     }
 
-    private static int? ReadInt(JsonNode root, string key)
+    private static int? ReadInt(JsonNode? root, string key)
     {
+        if (root == null)
+        {
+            return null;
+        }
+
         return ReadIntFromNode(root[key]);
     }
 

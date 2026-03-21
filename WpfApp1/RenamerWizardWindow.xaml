@@ -1,0 +1,129 @@
+<mah:MetroWindow x:Class="WpfApp1.RenamerWizardWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                 xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+                 mc:Ignorable="d"
+                 Title="Review Mods"
+                 Width="980"
+                 Height="720"
+                 WindowStartupLocation="CenterOwner"
+                 GlowBrush="{DynamicResource AccentColorBrush}"
+                 BorderBrush="{DynamicResource BorderBrush}"
+                 Background="{DynamicResource WindowBackgroundBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Margin="14,14,14,0" Padding="18,14" Style="{StaticResource AccentPanelCardBorderStyle}">
+            <DockPanel LastChildFill="True">
+                <StackPanel>
+                    <TextBlock Text="Review Mods" FontSize="22" FontWeight="SemiBold"/>
+                    <TextBlock Margin="0,6,0,0"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
+                               Text="Review unresolved or suspicious mods, enter the correct make/model/year, and retry only the sources you want reprocessed. Ignored entries stay hidden from future runs."
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.15*"/>
+                    <ColumnDefinition Width="1.85*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Margin="0,0,14,0" Padding="12" Style="{StaticResource PanelCardBorderStyle}">
+                    <DataGrid x:Name="EntriesGrid"
+                              ItemsSource="{Binding Entries}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              HeadersVisibility="Column"
+                              IsReadOnly="True"
+                              SelectionMode="Single"
+                              SelectionChanged="EntriesGrid_SelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Mod" Binding="{Binding DisplayName}" Width="2.4*"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.2*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Border>
+
+                <Border Grid.Column="1" Padding="18" Style="{StaticResource PanelCardBorderStyle}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <TextBlock x:Name="SourceNameText" FontSize="18" FontWeight="SemiBold" Text="Select a mod"/>
+                            <TextBlock x:Name="ReasonText" Margin="0,8,0,0" TextWrapping="Wrap" Foreground="{DynamicResource MutedForegroundBrush}"/>
+                            <TextBlock x:Name="PathText" Margin="0,8,0,10" TextWrapping="Wrap" Foreground="{DynamicResource MutedForegroundBrush}" FontSize="11"/>
+
+                            <TextBlock Text="Preview" FontWeight="SemiBold"/>
+                            <Border Margin="0,8,0,14" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="8" Background="{DynamicResource SurfaceBrush}">
+                                <Grid>
+                                    <Image x:Name="PreviewImage" Height="160" Stretch="Uniform"/>
+                                    <TextBlock x:Name="PreviewFallbackText" Text="No mod preview found." HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource MutedForegroundBrush}"/>
+                                </Grid>
+                            </Border>
+
+                            <TextBlock Text="Mod ZIP renamer" FontWeight="SemiBold"/>
+                            <TextBox x:Name="ZipRenameTextBox" Margin="0,8,0,4" MinHeight="34" VerticalContentAlignment="Center" TextChanged="ZipRenameTextBox_TextChanged"/>
+                            <TextBlock Margin="0,0,0,14" Foreground="{DynamicResource MutedForegroundBrush}" Text="Optional. Enter a new ZIP filename without the .zip extension. The rename will be applied when this review pass completes." TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Correct make" FontWeight="SemiBold"/>
+                            <TextBox x:Name="MakeTextBox" Margin="0,8,0,14" MinHeight="34" VerticalContentAlignment="Center" TextChanged="MakeTextBox_TextChanged"/>
+
+                            <TextBlock Text="Correct model" FontWeight="SemiBold"/>
+                            <TextBox x:Name="ModelTextBox" Margin="0,8,0,14" MinHeight="34" VerticalContentAlignment="Center" TextChanged="ModelTextBox_TextChanged"/>
+
+                            <TextBlock Text="Year or year range" FontWeight="SemiBold"/>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="YearMinTextBox" Grid.Column="0" MinHeight="34" VerticalContentAlignment="Center" TextChanged="YearMinTextBox_TextChanged"/>
+                                <TextBox x:Name="YearMaxTextBox" Grid.Column="2" MinHeight="34" VerticalContentAlignment="Center" TextChanged="YearMaxTextBox_TextChanged"/>
+                            </Grid>
+                            <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Leave any field blank if you do not want to supply it. Retry uses your entered hints for the selected mod only." TextWrapping="Wrap"/>
+
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="1" Padding="16" Style="{StaticResource PanelCardBorderStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="FooterText"
+                               Grid.Column="0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
+                               Text="When every entry is handled, the wizard closes and the app retries only the reviewed sources you marked for retry."
+                               TextWrapping="Wrap"/>
+
+                    <WrapPanel Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center">
+                        <Button Content="Retry with input" Width="132" Height="36" Click="RetryCurrent_Click"/>
+                        <Button Content="Skip" Width="96" Height="36" Margin="8,0,0,0" Click="SkipCurrent_Click"/>
+                        <Button Content="Ignore" Width="96" Height="36" Margin="8,0,0,0" Click="IgnoreCurrent_Click"/>
+                        <Button Content="Open Location" Width="126" Height="36" Margin="8,0,0,0" Click="OpenLocation_Click"/>
+                        <Button x:Name="DoneButton" Content="Done" Width="116" Height="36" Margin="8,0,0,0" Click="Done_Click" IsEnabled="False"/>
+                    </WrapPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</mah:MetroWindow>
