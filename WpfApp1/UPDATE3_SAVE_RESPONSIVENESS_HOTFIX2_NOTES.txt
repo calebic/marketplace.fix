@@ -1,5 +1,0 @@
-UPDATE3 Save Responsiveness Hotfix 2
-
-- fixed cross-thread save error caused by background save path reading WPF controls from the worker thread
-- manual Save now snapshots backup toggle, vehicles mirror toggle, and mods path on the UI thread before Task.Run
-- background save now uses those captured values and no longer touches UI-owned controls during the write
