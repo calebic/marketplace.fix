@@ -47,10 +47,8 @@ namespace WpfApp1
         {
             try
             {
-                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamNGMarketplaceFixer");
-                Directory.CreateDirectory(dir);
-                var path = Path.Combine(dir, "ui-crash.log");
-                File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\n\n");
+                AppPaths.EnsureParentDirectory(AppPaths.CrashLogPath);
+                File.AppendAllText(AppPaths.CrashLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}\n\n");
             }
             catch
             {

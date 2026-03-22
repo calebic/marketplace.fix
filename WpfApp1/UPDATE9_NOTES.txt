@@ -1,0 +1,19 @@
+Update 9 - scanner/editor architecture cleanup
+
+What changed:
+- Added ConfigJsonService.cs to centralize config parsing, config-item creation, vehicle info loading, config .pc discovery, license plate reading, and item hydration.
+- Added ArchiveScanContext to centralize zip-entry caching/JSON reads for scanner flows.
+- Refactored ModScannerService.cs to use ConfigJsonService instead of maintaining its own duplicate config parsing/build logic.
+- Removed the old duplicate scanner/create-item helper block from MainWindow.xaml.cs.
+- MainWindow save/reload/bulk-edit hydration paths now call ConfigJsonService.UpdateItemFromJson so scanner/editor flows hydrate config items the same way.
+- Reduced MainWindow.xaml.cs size by moving scanner/config responsibilities out of UI code.
+
+Main things to sanity-check after build:
+- normal Scan still finds the same mods/configs as before
+- config preview/details still populate after scan
+- Save, Reload, Bulk Edit, and Auto Fill All still refresh edited configs correctly
+- map-only, mixed, and vehicle mods still classify correctly
+- opening a config from a zip still shows config/vehicle metadata normally
+
+Scope note:
+- This update is intentionally an internal cleanup pass. It should feel mostly the same in the UI, but future fixes should be safer because scanner and editor hydration now share one code path.

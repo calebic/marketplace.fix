@@ -1,0 +1,10 @@
+Update 5 Hotfix 1 - Internet Lookup Timeout
+
+Changes:
+- manual Internet Lookup window now uses a larger dedicated timeout budget than the general lookup timeout used by background workflows
+- manual lookup preserves partial candidate results when cancellation happens after some candidates have already been found
+- trusted-source manual lookup now exits earlier once a strong priced candidate has already been found
+
+Goal:
+- reduce cases where the Internet Lookup window reports a timeout before returning any result
+- prefer returning decent partial/manual candidates instead of discarding them when the lookup budget expires late in the process

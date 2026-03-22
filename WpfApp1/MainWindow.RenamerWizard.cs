@@ -13,15 +13,9 @@ namespace WpfApp1;
 
 public partial class MainWindow
 {
-    private static readonly string RenamerIgnorePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BeamNGMarketplaceConfigEditor",
-        "mod-review-ignored.json");
+    private static readonly string RenamerIgnorePath = AppPaths.ReviewIgnorePath;
 
-    private static readonly string RenamerHistoryPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BeamNGMarketplaceConfigEditor",
-        "mod-review-history.log");
+    private static readonly string RenamerHistoryPath = AppPaths.ReviewHistoryPath;
 
     private readonly RenamerIgnoreStore _renamerIgnoreStore = new(RenamerIgnorePath);
 
@@ -44,6 +38,7 @@ public partial class MainWindow
         var retried = 0;
         var ignored = 0;
         var renamedAny = false;
+        var persistenceDirty = false;
         var affectedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var renamedEntry in wizard.Entries.Where(x => x.HasQueuedRename).ToList())
@@ -51,6 +46,7 @@ public partial class MainWindow
             if (TryApplyQueuedZipRename(renamedEntry, out var renamedPath))
             {
                 renamedAny = true;
+                persistenceDirty = true;
                 affectedSources.Add(renamedPath);
                 AppendRenameHistory($"RENAME {renamedEntry.OriginalSourcePath} -> {renamedPath}");
             }
@@ -60,12 +56,20 @@ public partial class MainWindow
         {
             _renamerIgnoreStore.Ignore(ignoredEntry.Signature);
             ignored++;
+            persistenceDirty = true;
             foreach (var item in Configs.Where(x => string.Equals(x.SourcePath, ignoredEntry.SourcePath, StringComparison.OrdinalIgnoreCase)))
             {
                 item.IgnoreFromRenamer = true;
+                item.LastAutoFillStatus = "Ignored";
+                item.LastAutoFillSource = "Review input";
+                item.LastAutoFillDetail = string.IsNullOrWhiteSpace(ignoredEntry.Reason)
+                    ? "Ignored from future review/retry passes by user choice."
+                    : ignoredEntry.Reason;
+                item.DecisionOrigin = "Review input";
+                item.LastDecisionUtc = DateTime.UtcNow;
                 item.NotifyChanges();
             }
-            SaveModMemorySnapshot();
+
             AppendRenameHistory($"IGNORE {ignoredEntry.SourcePath} :: {ignoredEntry.Reason}");
         }
 
@@ -73,8 +77,14 @@ public partial class MainWindow
         {
             ApplyReviewInputToSource(retriedEntry);
             retried++;
+            persistenceDirty = true;
             affectedSources.Add(retriedEntry.SourcePath);
             AppendRenameHistory($"RETRY {retriedEntry.SourcePath} :: make='{retriedEntry.UserMake}' model='{retriedEntry.UserModel}' years='{retriedEntry.UserYearSummary}'");
+        }
+
+        if (persistenceDirty)
+        {
+            SaveModMemorySnapshot();
         }
 
         var rescanned = false;
@@ -97,6 +107,8 @@ public partial class MainWindow
         var matchingItems = Configs.Where(x =>
             string.Equals(x.SourcePath, entry.SourcePath, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(x.SourcePath, oldPath, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var reviewSummary = BuildReviewInputSummary(entry);
         foreach (var item in matchingItems)
         {
             item.SourcePath = entry.SourcePath;
@@ -106,8 +118,38 @@ public partial class MainWindow
             item.SourceHintYearMin = entry.UserYearMin;
             item.SourceHintYearMax = entry.UserYearMax;
             item.IgnoreFromRenamer = false;
+            item.LastAutoFillStatus = "Queued for retry";
+            item.LastAutoFillSource = "Review input";
+            item.LastAutoFillDetail = reviewSummary;
+            item.ReviewReason = reviewSummary;
+            item.DecisionOrigin = "Review input";
+            item.LastDecisionUtc = DateTime.UtcNow;
             item.NotifyChanges();
         }
+    }
+
+
+    private static string BuildReviewInputSummary(SourceReviewEntry entry)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(entry.UserMake))
+        {
+            parts.Add($"make={entry.UserMake.Trim()}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.UserModel))
+        {
+            parts.Add($"model={entry.UserModel.Trim()}");
+        }
+
+        if (entry.UserYearMin.HasValue || entry.UserYearMax.HasValue)
+        {
+            parts.Add($"years={entry.UserYearSummary}");
+        }
+
+        return parts.Count == 0
+            ? "Queued for retry using the latest review decision."
+            : $"Queued for retry with review input: {string.Join(", ", parts)}";
     }
 
 
@@ -200,8 +242,16 @@ public partial class MainWindow
                 continue;
             }
 
+            var aggregatedPriority = suspiciousItems.Max(x => x.ReviewPriority);
+            var leadingItem = suspiciousItems
+                .OrderByDescending(x => x.ReviewSortScore)
+                .ThenByDescending(x => x.ReviewPriority)
+                .ThenByDescending(x => x.IsSuspicious)
+                .First();
+            var category = leadingItem.ReviewCategory ?? string.Empty;
+
             var reason = suspiciousItems
-                .Select(x => x.ReviewReason ?? (x.HasMissing ? $"Missing: {x.MissingSummary}" : x.InferenceReason))
+                .Select(x => x.ReviewReason ?? x.ReviewConflictSummary ?? (x.HasMissing ? $"Missing: {x.MissingSummary}" : x.InferenceReason))
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Take(3)
@@ -217,7 +267,11 @@ public partial class MainWindow
                 DisplayName = Path.GetFileName(first.SourcePath),
                 DirectoryPath = Path.GetDirectoryName(first.SourcePath) ?? string.Empty,
                 Extension = first.IsZip ? Path.GetExtension(first.SourcePath) : string.Empty,
-                Reason = string.Join("  •  ", reason),
+                Reason = string.IsNullOrWhiteSpace(category)
+                    ? string.Join("  •  ", reason)
+                    : $"{category} (priority {aggregatedPriority})  •  {string.Join("  •  ", reason)}",
+                ReviewCategory = category,
+                ReviewPriority = aggregatedPriority,
                 Signature = signature,
                 PreviewImagePath = TryResolveModPreviewImage(first.SourcePath, first.InfoPath, first.IsZip),
                 PendingZipName = first.IsZip ? Path.GetFileNameWithoutExtension(first.SourcePath) : string.Empty,
@@ -230,7 +284,7 @@ public partial class MainWindow
             result.Add(entry);
         }
 
-        return result.OrderBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
+        return result.OrderByDescending(x => x.ReviewPriority).ThenByDescending(x => !string.IsNullOrWhiteSpace(x.UserMake) || !string.IsNullOrWhiteSpace(x.UserModel)).ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
 
@@ -300,7 +354,7 @@ public partial class MainWindow
                 return null;
             }
 
-            var cacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamNGMarketplaceConfigEditor", "preview-cache");
+            var cacheDir = AppPaths.PreviewCacheRoot;
             Directory.CreateDirectory(cacheDir);
             var cacheName = $"{CreateSourceSignature(modPath, true)}_{Path.GetFileName(entry.FullName)}";
             var cachePath = Path.Combine(cacheDir, cacheName);
@@ -347,8 +401,16 @@ public partial class MainWindow
             StatusDetailTextBlock.Text = "Re-running inference with your review input and refreshing the workspace.";
             BeginAutoFillProgress(affectedSources.Count, "Retrying reviewed mods...");
 
-            await AutoFillAffectedSourcesAsync(affectedSources);
-            RefreshAllWorkspaceState();
+            _refreshCoordinator.BeginDeferredRefresh();
+            try
+            {
+                await AutoFillAffectedSourcesAsync(affectedSources);
+                _refreshCoordinator.RequestRefresh(persist: true);
+            }
+            finally
+            {
+                _refreshCoordinator.EndDeferredRefresh(defaultPersist: true);
+            }
             EndAutoFillProgress($"Review retry complete for {affectedSources.Count} mod(s).");
             StatusTextBlock.Text = $"Review retry complete for {affectedSources.Count} mod(s).";
             StatusDetailTextBlock.Text = "Reviewed mods were refreshed with your latest input.";
@@ -397,16 +459,12 @@ public partial class MainWindow
     {
         try
         {
-            var dir = Path.GetDirectoryName(RenamerHistoryPath);
-            if (!string.IsNullOrWhiteSpace(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
+            AppPaths.EnsureParentDirectory(RenamerHistoryPath);
             File.AppendAllText(RenamerHistoryPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {line}{Environment.NewLine}");
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("review-history-save", ex.Message);
         }
     }
 
@@ -414,58 +472,40 @@ public partial class MainWindow
     private async Task AutoFillAffectedSourcesAsync(HashSet<string> affectedSources)
     {
         var targets = Configs
-            .Where(x => affectedSources.Contains(x.SourcePath))
+            .Where(x => affectedSources.Contains(x.SourcePath) && !x.IgnoreFromRenamer)
+            .OrderByDescending(x => x.HasSourceHints)
+            .ThenByDescending(x => x.ReviewSortScore)
+            .ThenByDescending(x => x.ReviewPriority)
             .ToList();
 
         if (targets.Count == 0)
         {
+            AppendScrapeLog("RETRY skipped because no eligible reviewed configs remained after ignore filtering.");
             return;
         }
 
-        var processedSources = 0;
-        foreach (var sourceGroup in targets.GroupBy(x => x.SourcePath, StringComparer.OrdinalIgnoreCase))
-        {
-            var sourceItems = sourceGroup.ToList();
-            var pendingWrites = new List<PendingConfigWrite>();
-            var completedItems = new List<(VehicleConfigItem Item, VehicleInferenceResult Inference, string Detail, string Source)>();
-            var modLabel = Path.GetFileName(sourceGroup.Key);
-            UpdateAutoFillProgress(processedSources, affectedSources.Count, $"Retrying reviewed mods... {processedSources}/{affectedSources.Count}", $"Starting {modLabel}");
-
-            foreach (var item in sourceItems)
+        var lastReportedProcessed = -1;
+        var batchResult = await _autoFillWorkflowService.RunBatchAsync(
+            targets,
+            mirrorToVehicles: true,
+            CancellationToken.None,
+            progress =>
             {
-                var itemLabel = DescribeItem(item);
-                SetItemAutoFillState(item, "Running", "Retrying", $"Retrying {itemLabel}");
-                AppendScrapeLog($"RETRY START {itemLabel}");
-
-                string latestDetail = "Retrying reviewed mod...";
-                var inference = await Task.Run(() => _inferenceService.Infer(item, detail =>
+                var force = progress.Processed >= progress.Total || progress.Processed >= lastReportedProcessed + 4;
+                if (!ShouldPushAutoFillUiProgress(force))
                 {
-                    latestDetail = detail;
-                }, CancellationToken.None));
+                    return;
+                }
 
-                ApplyInferenceResultToItem(item, inference);
-                var json = BuildJsonForItem(item);
-                item.Json = json;
-                var rendered = json.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-                pendingWrites.Add(new PendingConfigWrite { Item = item, Json = rendered });
+                lastReportedProcessed = progress.Processed;
+                UpdateAutoFillProgress(progress.Processed, progress.Total, progress.Status.Replace("Auto-filling configs", "Retrying reviewed mods"), progress.Detail);
+            },
+            operationLabel: "Retrying reviewed mods");
 
-                var detail = BuildInferenceProgressDetail(inference);
-                var source = string.IsNullOrWhiteSpace(inference.ValueSource) ? "Heuristic/local rules" : inference.ValueSource!;
-                completedItems.Add((item, inference, detail, source));
-                SetItemAutoFillState(item, "Running", "Queued", latestDetail);
-                await Task.Yield();
-            }
-
-            WriteConfigBatch(pendingWrites, mirrorToVehicles: true);
-            foreach (var completed in completedItems)
-            {
-                completed.Item.NotifyChanges();
-                SetItemAutoFillState(completed.Item, "Completed", completed.Source, completed.Detail);
-                AppendScrapeLog($"RETRY SUCCESS {DescribeItem(completed.Item)} :: Source={completed.Source} :: {completed.Detail}");
-            }
-
-            processedSources++;
-            UpdateAutoFillProgress(processedSources, affectedSources.Count, $"Retrying reviewed mods... {processedSources}/{affectedSources.Count}", $"{modLabel} complete");
+        AppendScrapeLog($"RETRY processed={batchResult.Processed} saved={batchResult.Saved} failed={batchResult.Failed} local={batchResult.LocalOnlyMatches} online={batchResult.OnlineMatches}");
+        if (batchResult.HeldForReview > 0)
+        {
+            AppendScrapeLog($"RETRY HELD {batchResult.HeldForReview} config(s) for further review.");
         }
 
         _configsView?.Refresh();
@@ -475,7 +515,6 @@ public partial class MainWindow
             SetDirty(false);
         }
     }
-
 
     private static (string make, string model, int? yearMin, int? yearMax) BuildSuggestedReviewInput(IReadOnlyCollection<VehicleConfigItem> items)
     {

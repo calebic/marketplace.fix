@@ -1,14 +1,13 @@
 ﻿using System.Windows.Data;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace WpfApp1;
 
 public partial class MainWindow
 {
-    private static readonly string PersistedModMemoryPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BeamNGMarketplaceConfigEditor",
-        "mod-memory.json");
+    private static readonly string PersistedModMemoryPath = AppPaths.ModMemoryPath;
 
     private readonly ModMemoryStore _modMemoryStore = new(PersistedModMemoryPath);
 
@@ -41,7 +40,45 @@ public partial class MainWindow
 
     private void SaveModMemorySnapshot()
     {
-        _modMemoryStore.SaveFrom(Configs);
+        _modMemoryStore.Save(BuildModMemorySnapshot());
+    }
+
+    private PersistedModMemory BuildModMemorySnapshot()
+    {
+        return ModMemoryStore.BuildSnapshot(Configs.ToList());
+    }
+
+    private Task SaveModMemorySnapshotAsync(PersistedModMemory? snapshot = null)
+    {
+        var snapshotToSave = snapshot ?? BuildModMemorySnapshot();
+        return Task.Run(() =>
+        {
+            try
+            {
+                _modMemoryStore.Save(snapshotToSave);
+            }
+            catch (Exception ex)
+            {
+                AppPaths.AppendStateLog("mod-memory-save", ex.Message);
+            }
+        });
+    }
+
+    private void RefreshWorkspaceAfterSelectedSave()
+    {
+        RefreshWorkspaceSummary();
+        RefreshWorkspacePageSummaries();
+        RefreshDataPageSummary();
+        _configsView?.Refresh();
+        if (CollectionViewSource.GetDefaultView(FlaggedConfigs) is { } flaggedView)
+        {
+            flaggedView.Refresh();
+        }
+
+        RefreshLicensePlatesPageSummary();
+        BuildLicensePlatesPageSelectionSources();
+        RefreshLicensePlatesPageUi();
+        UpdateEmptyState();
     }
 
     private void RefreshAllWorkspaceState(bool persist = false)

@@ -1,0 +1,16 @@
+Update 3: write safety + review/retry cleanup
+
+What changed:
+- Added safer atomic file replacement helpers for normal config file writes and zip rewrites.
+- Zip rewrites now write to a unique temp file and then replace the original more safely.
+- Config file writes now go through an atomic temp-write/replace flow instead of writing directly in place.
+- Added a shared write gate so save/rewrite paths do not overlap as easily.
+- Mirror-to-vehicles now avoids recopying shared assets repeatedly for every config in the same source/model group during batch writes.
+- Review/retry now marks items more clearly as ignored or queued for retry with the user’s entered hints.
+- Review/retry now filters ignored items out of retry passes.
+- Review/retry now logs a compact processed/saved/failed summary and persists review decisions in one cleaner pass.
+
+Main intent:
+- make saves and rewrites harder to corrupt or partially overwrite
+- make retry behavior feel more intentional and easier to trust
+- reduce extra mirror work during grouped saves

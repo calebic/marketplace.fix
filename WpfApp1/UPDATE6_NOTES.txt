@@ -1,0 +1,12 @@
+Update 6: diagnostics + trust + UI clarity
+
+What changed:
+- Internet Lookup window now shows a live lookup status badge and clearer diagnostics text.
+- Lookup results now display confidence badges and a short match summary so users can tell why one result outranked another.
+- Manual lookup now reports clearer no-result vs timeout states and logs the last lookup outcome back into the main scrape log.
+- Configuration Editor now includes a decision diagnostics card showing confidence, review state, identity evidence, and valuation evidence for the selected config.
+- Review Queue now includes a confidence column to make weak vs strong held items easier to spot.
+- Applying a manual lookup now updates confidence/evidence fields on the selected config so the new diagnostics card reflects the lookup immediately.
+
+Primary goal:
+- make the tool explain itself better so users can trust why a config was autofilled, held for review, or manually updated from internet lookup.

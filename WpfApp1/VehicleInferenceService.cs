@@ -31,6 +31,9 @@ public sealed class VehicleInferenceResult
     public int ConfidenceScore { get; set; }
     public string? ConfidenceTier { get; set; }
     public bool IsSuspicious { get; set; }
+    public string? ReviewCategory { get; set; }
+    public int ReviewPriority { get; set; }
+    public string? ReviewConflictSummary { get; set; }
 
     public bool HasAnyValue =>
         !string.IsNullOrWhiteSpace(Model) ||
@@ -70,6 +73,9 @@ public sealed class VehicleInferenceResult
         ConfidenceScore = Math.Max(ConfidenceScore, other.ConfidenceScore);
         ConfidenceTier ??= other.ConfidenceTier;
         IsSuspicious = IsSuspicious || other.IsSuspicious;
+        if (string.IsNullOrWhiteSpace(ReviewCategory)) ReviewCategory = other.ReviewCategory;
+        ReviewPriority = Math.Max(ReviewPriority, other.ReviewPriority);
+        if (string.IsNullOrWhiteSpace(ReviewConflictSummary)) ReviewConflictSummary = other.ReviewConflictSummary;
     }
 
     public VehicleInferenceResult Clone() => new()
@@ -95,7 +101,10 @@ public sealed class VehicleInferenceResult
         IsMapMod = IsMapMod,
         ConfidenceScore = ConfidenceScore,
         ConfidenceTier = ConfidenceTier,
-        IsSuspicious = IsSuspicious
+        IsSuspicious = IsSuspicious,
+        ReviewCategory = ReviewCategory,
+        ReviewPriority = ReviewPriority,
+        ReviewConflictSummary = ReviewConflictSummary
     };
 }
 
@@ -153,8 +162,9 @@ public sealed class VehicleInferenceService
         return new VehicleInferenceService(profiles, makes, trimRules, pricingRules, RealVehiclePricingService.CreateDefault());
     }
 
-    public VehicleInferenceResult Infer(VehicleConfigItem item, Action<string>? progress = null, CancellationToken cancellationToken = default)
+    public VehicleInferenceResult Infer(VehicleConfigItem item, Action<string>? progress = null, CancellationToken cancellationToken = default, InferenceRunOptions? options = null)
     {
+        options ??= InferenceRunOptions.Default;
         progress?.Invoke("Classifying mod content...");
         var normalized = NormalizeCombined(item);
         var contentCategory = ClassifyContentCategory(item, normalized);
@@ -193,7 +203,7 @@ public sealed class VehicleInferenceService
         AddCandidateBrand(candidateBrands, item.SourceHintMake);
 
         RealVehicleIdentityResult? internetIdentity = null;
-        if (ShouldUseInternetIdentity(profile, sourceIdentity, makeMatch, item, normalized))
+        if (options.AllowInternetIdentity && ShouldUseInternetIdentity(profile, sourceIdentity, makeMatch, item, normalized))
         {
             progress?.Invoke("Verifying mod identity with targeted internet search...");
             internetIdentity = _pricingService.TryResolveIdentity(item, candidateBrands.ToList(), progress, cancellationToken);
@@ -285,7 +295,50 @@ public sealed class VehicleInferenceService
             result.InferenceReason = "User review input";
         }
 
-        if (!string.IsNullOrWhiteSpace(internetIdentity?.Brand) && !string.Equals(result.Brand, internetIdentity.Brand, StringComparison.OrdinalIgnoreCase) && internetIdentity.ConfidenceScore >= 84 && !item.HasSourceHints)
+        var structuredBrand = item.VehicleInfoBrand;
+        var hasStrongStructuredBrand = StrongBrandSignal(structuredBrand, !string.IsNullOrWhiteSpace(structuredBrand) ? 90 : 0);
+        var hasStrongSourceBrand = StrongBrandSignal(sourceIdentity.Brand, sourceIdentity.Confidence);
+        var hasStrongInternetBrand = StrongBrandSignal(internetIdentity?.Brand, internetIdentity?.ConfidenceScore ?? 0);
+        var hasStrongConfigBrand = !makeMatch.IsSuspicious && StrongBrandSignal(makeMatch.Rule?.Brand, makeMatch.Score);
+
+        if (!item.HasSourceHints && BrandsConflict(sourceIdentity.Brand, makeMatch.Rule?.Brand))
+        {
+            result.Brand = sourceIdentity.Brand;
+            result.ConfidenceScore = Math.Max(result.ConfidenceScore, 88);
+            result.IsSuspicious = true;
+            result.SuspicionReason = AppendReason(result.SuspicionReason, $"Mod-level identity points to {sourceIdentity.Brand}, but config-level text looked closer to {makeMatch.Rule?.Brand}.");
+            result.BrandEvidence = sourceIdentity.Evidence;
+            result.InferenceReason = "Mod-level identity";
+        }
+
+        if (!item.HasSourceHints && hasStrongInternetBrand && (BrandsConflict(internetIdentity?.Brand, structuredBrand) || BrandsConflict(internetIdentity?.Brand, sourceIdentity.Brand) || BrandsConflict(internetIdentity?.Brand, makeMatch.Rule?.Brand)))
+        {
+            var canPromoteInternetIdentity = (!hasStrongStructuredBrand && !hasStrongSourceBrand && !hasStrongConfigBrand)
+                || ((internetIdentity?.ConfidenceScore ?? 0) >= Math.Max(sourceIdentity.Confidence, makeMatch.Score) + 10 && makeMatch.IsSuspicious);
+
+            if (canPromoteInternetIdentity && !string.IsNullOrWhiteSpace(internetIdentity?.Brand))
+            {
+                result.Brand = internetIdentity.Brand;
+                result.BrandEvidence = internetIdentity.Evidence ?? result.BrandEvidence;
+                result.InferenceReason = "Internet-verified mod identity";
+                result.ConfidenceScore = Math.Max(result.ConfidenceScore, internetIdentity.ConfidenceScore);
+                result.IsSuspicious = makeMatch.IsSuspicious;
+                result.SuspicionReason = makeMatch.IsSuspicious
+                    ? AppendReason(result.SuspicionReason, $"Online identity leaned toward {internetIdentity.Brand}, but local config text disagreed.")
+                    : result.SuspicionReason;
+                if (!string.IsNullOrWhiteSpace(internetIdentity.Model))
+                {
+                    result.Model = internetIdentity.Model;
+                }
+            }
+            else
+            {
+                result.IsSuspicious = true;
+                result.ConfidenceScore = Math.Min(result.ConfidenceScore, 78);
+                result.SuspicionReason = AppendReason(result.SuspicionReason, $"Online identity suggested {internetIdentity?.Brand}, but stronger local evidence still points elsewhere.");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(internetIdentity?.Brand) && !string.Equals(result.Brand, internetIdentity.Brand, StringComparison.OrdinalIgnoreCase) && internetIdentity.ConfidenceScore >= 84 && !item.HasSourceHints)
         {
             result.Brand = internetIdentity.Brand;
             result.BrandEvidence = internetIdentity.Evidence ?? result.BrandEvidence;
@@ -298,17 +351,6 @@ public sealed class VehicleInferenceService
                 result.Model = internetIdentity.Model;
             }
         }
-
-        if (!string.IsNullOrWhiteSpace(sourceIdentity.Brand) && !string.IsNullOrWhiteSpace(makeMatch.Rule?.Brand) && !sourceIdentity.Brand.Equals(makeMatch.Rule.Brand, StringComparison.OrdinalIgnoreCase) && !item.HasSourceHints)
-        {
-            result.Brand = sourceIdentity.Brand;
-            result.ConfidenceScore = Math.Max(result.ConfidenceScore, 88);
-            result.IsSuspicious = true;
-            result.SuspicionReason = AppendReason(result.SuspicionReason, $"Mod-level identity points to {sourceIdentity.Brand}, but config-level text looked closer to {makeMatch.Rule.Brand}.");
-            result.BrandEvidence = sourceIdentity.Evidence;
-            result.InferenceReason = "Mod-level identity";
-        }
-
 
         if (IsTrailerLikeSource(normalized) && string.IsNullOrWhiteSpace(item.SourceHintMake))
         {
@@ -334,19 +376,30 @@ public sealed class VehicleInferenceService
             result.Population ??= estimate.population;
         }
 
-        if (ShouldUseOnlinePricing(item, result, normalized))
+        if (options.AllowOnlinePricing && ShouldUseOnlinePricing(item, result, normalized))
         {
             var livePrice = _pricingService.TryLookup(item, result, progress, cancellationToken);
             if (livePrice != null && livePrice.EstimatedValue > 0 && livePrice.ConfidenceScore >= 60)
             {
                 var localValueMissing = !result.Value.HasValue || result.Value.Value <= 0;
                 var localConfidenceWeak = result.ConfidenceScore < 80 || result.IsSuspicious;
-                if (localValueMissing || localConfidenceWeak || livePrice.ConfidenceScore >= 80)
+                var canAdoptOnlineValuation = !result.IsSuspicious
+                    || item.HasSourceHints
+                    || livePrice.ConfidenceScore >= 85;
+
+                if ((localValueMissing || localConfidenceWeak || livePrice.ConfidenceScore >= 80) && canAdoptOnlineValuation)
                 {
                     result.Value = livePrice.EstimatedValue;
                     result.ValueSource = livePrice.Source;
                     result.ValueEvidence = livePrice.Evidence;
-                    result.Population ??= RealVehiclePricingService.EstimatePopulationBandFromValue(livePrice.EstimatedValue);
+                    if (!result.Population.HasValue || livePrice.ConfidenceScore >= 80)
+                    {
+                        result.Population = RealVehiclePricingService.EstimatePopulationBandFromValue(livePrice.EstimatedValue);
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(livePrice.Evidence))
+                {
+                    result.ValueEvidence = AppendReason(result.ValueEvidence, "Online value was found but not applied automatically because identity confidence was still weak.");
                 }
             }
         }
@@ -365,6 +418,15 @@ public sealed class VehicleInferenceService
 
         result.ConfidenceTier = ClassifyConfidenceTier(result);
 
+        var reviewAssessment = ReviewDecisionService.Analyze(item, result, holdWeakMatchesForReview: true);
+        result.ReviewCategory = reviewAssessment.Category;
+        result.ReviewPriority = reviewAssessment.Priority;
+        result.ReviewConflictSummary = reviewAssessment.ConflictSummary;
+        if (result.IsSuspicious && string.IsNullOrWhiteSpace(result.SuspicionReason))
+        {
+            result.SuspicionReason = reviewAssessment.Summary;
+        }
+
         return result;
     }
 
@@ -381,6 +443,18 @@ public sealed class VehicleInferenceService
     public void FlushPricingCache()
     {
         _pricingService.FlushCacheToDisk();
+    }
+
+    private static bool StrongBrandSignal(string? brand, int confidence)
+    {
+        return !string.IsNullOrWhiteSpace(brand) && confidence >= 80;
+    }
+
+    private static bool BrandsConflict(string? left, string? right)
+    {
+        return !string.IsNullOrWhiteSpace(left)
+               && !string.IsNullOrWhiteSpace(right)
+               && !left.Trim().Equals(right.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AddCandidateBrand(HashSet<string> brands, string? brand)

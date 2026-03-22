@@ -46,6 +46,8 @@ public sealed class SourceReviewEntry : INotifyPropertyChanged
     public string DirectoryPath { get; init; } = string.Empty;
     public string Extension { get; init; } = string.Empty;
     public string? Reason { get; init; }
+    public string ReviewCategory { get; init; } = string.Empty;
+    public int ReviewPriority { get; init; }
     public string Signature { get; init; } = string.Empty;
 
     public string? PreviewImagePath

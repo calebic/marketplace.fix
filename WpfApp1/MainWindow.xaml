@@ -856,6 +856,7 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock x:Name="BrandLabel" Grid.Row="0" Text="Brand" Style="{StaticResource FormFieldLabelStyle}"/>
@@ -930,6 +931,49 @@
                                     Padding="18,6"
                                     Click="SaveChanges_Click"
                                     IsEnabled="False"/>
+
+                            <Border Grid.Row="13" Grid.Column="0" Grid.ColumnSpan="2"
+                                    Margin="0,14,0,0"
+                                    Style="{StaticResource PanelCardBorderStyle}"
+                                    Padding="14">
+                                <StackPanel>
+                                    <WrapPanel>
+                                        <Border x:Name="DecisionStatusBadge"
+                                                Background="{DynamicResource StatusBadgeBackgroundBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8"
+                                                Padding="8,3"
+                                                Margin="0,0,8,8">
+                                            <TextBlock x:Name="DecisionStatusBadgeText"
+                                                       Text="Idle"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource AppForegroundBrush}"/>
+                                        </Border>
+                                        <TextBlock x:Name="DecisionSummaryTextBlock"
+                                                   Width="290"
+                                                   Foreground="{DynamicResource MutedForegroundBrush}"
+                                                   TextWrapping="Wrap"
+                                                   Text="Select a config to see confidence, review pressure, and the latest autofill or lookup reasoning."/>
+                                    </WrapPanel>
+                                    <TextBlock x:Name="DecisionReviewTextBlock"
+                                               Margin="0,8,0,0"
+                                               Foreground="{DynamicResource MutedForegroundBrush}"
+                                               TextWrapping="Wrap"
+                                               Text="Review reason: none yet."/>
+                                    <TextBlock x:Name="DecisionIdentityEvidenceTextBlock"
+                                               Margin="0,8,0,0"
+                                               Foreground="{DynamicResource MutedForegroundBrush}"
+                                               TextWrapping="Wrap"
+                                               Text="Identity evidence: none recorded yet."/>
+                                    <TextBlock x:Name="DecisionValuationEvidenceTextBlock"
+                                               Margin="0,8,0,0"
+                                               Foreground="{DynamicResource MutedForegroundBrush}"
+                                               TextWrapping="Wrap"
+                                               Text="Valuation evidence: none recorded yet."/>
+                                </StackPanel>
+                            </Border>
                         </Grid>
 
                     </StackPanel>
@@ -1017,7 +1061,8 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Vehicle" Binding="{Binding VehicleName}" Width="2.3*"/>
                             <DataGridTextColumn Header="Mod" Binding="{Binding ModName}" Width="1.6*"/>
-                            <DataGridTextColumn Header="Review reason" Binding="{Binding ReviewReason}" Width="2.8*"/>
+                            <DataGridTextColumn Header="Review reason" Binding="{Binding ReviewReason}" Width="2.45*"/>
+                            <DataGridTextColumn Header="Confidence" Binding="{Binding ConfidenceTier}" Width="0.9*"/>
                             <DataGridTextColumn Header="Missing" Binding="{Binding HasMissingText}" Width="0.7*"/>
                             <DataGridTextColumn Header="Suspicious" Binding="{Binding IsSuspiciousText}" Width="0.8*"/>
                         </DataGrid.Columns>

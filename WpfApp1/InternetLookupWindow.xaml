@@ -137,6 +137,26 @@
                                    Margin="0,6,0,0"
                                    Foreground="{DynamicResource MutedForegroundBrush}"
                                    TextWrapping="Wrap"/>
+                        <WrapPanel Margin="0,10,0,0">
+                            <Border x:Name="LookupStatusBadge"
+                                    Background="{DynamicResource StatusBadgeBackgroundBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="8,3"
+                                    Margin="0,0,8,8">
+                                <TextBlock x:Name="LookupStatusBadgeText"
+                                           Text="Idle"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AppForegroundBrush}"/>
+                            </Border>
+                            <TextBlock x:Name="LookupDiagnosticsTextBlock"
+                                       Width="260"
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="Run a lookup to see why results ranked well, which fallbacks were used, or why nothing strong was found."/>
+                        </WrapPanel>
                     </StackPanel>
 
                     <Border Grid.Row="1"
@@ -208,7 +228,7 @@
                                                                 BorderThickness="1"
                                                                 CornerRadius="8"
                                                                 Padding="8,3">
-                                                            <TextBlock Text="Select" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                                            <TextBlock Text="{Binding ConfidenceCaption}" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
                                                         </Border>
                                                     </StackPanel>
                                                 </Grid>
@@ -230,6 +250,11 @@
                                                                FontSize="11"
                                                                TextWrapping="Wrap"/>
                                                 </StackPanel>
+
+                                                <TextBlock Text="{Binding MatchSummary}"
+                                                           Margin="0,8,0,0"
+                                                           Foreground="{DynamicResource MutedForegroundBrush}"
+                                                           TextWrapping="Wrap"/>
 
                                                 <TextBlock Text="{Binding EvidenceLine}"
                                                            Margin="0,8,0,0"

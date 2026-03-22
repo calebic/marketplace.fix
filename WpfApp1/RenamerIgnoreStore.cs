@@ -44,17 +44,18 @@ public sealed class RenamerIgnoreStore
     {
         try
         {
-            if (!File.Exists(path))
+            var json = AtomicFileIO.ReadAllTextWithBackup(path);
+            if (string.IsNullOrWhiteSpace(json))
             {
                 return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             }
 
-            var json = File.ReadAllText(path);
             var values = JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
             return new HashSet<string>(values, StringComparer.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("review-ignore-load", ex.Message);
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
     }
@@ -63,17 +64,12 @@ public sealed class RenamerIgnoreStore
     {
         try
         {
-            var dir = Path.GetDirectoryName(_path);
-            if (!string.IsNullOrWhiteSpace(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
             var json = JsonSerializer.Serialize(_ignored.OrderBy(x => x).ToList(), new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_path, json);
+            AtomicFileIO.WriteAllTextAtomic(_path, json);
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("review-ignore-save", ex.Message);
         }
     }
 }

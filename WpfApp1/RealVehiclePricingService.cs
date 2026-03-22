@@ -20,7 +20,7 @@ public sealed class RealVehiclePricingService
     private static readonly Dictionary<string, DateTimeOffset> NegativeLookupCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, DateTimeOffset> HostCooldowns = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, DateTimeOffset> HostLastRequestUtc = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly TimeSpan NegativeLookupTtl = TimeSpan.FromHours(6);
+    private static readonly TimeSpan NegativeLookupTtl = TimeSpan.FromHours(1);
     private static readonly TimeSpan SearchEngineCooldown = TimeSpan.FromMinutes(2);
     private static bool _bulkAutofillMode;
     private readonly string _cachePath;
@@ -28,6 +28,11 @@ public sealed class RealVehiclePricingService
     private int _pendingCacheWrites;
     private static readonly object RuleDataGate = new();
     private static LookupRuleData? _lookupRuleData;
+    private static readonly Lazy<RealVehiclePricingService> DefaultInstance = new(() =>
+    {
+        Directory.CreateDirectory(AppPaths.CacheRoot);
+        return new RealVehiclePricingService(AppPaths.PricingCachePath);
+    });
 
     public RealVehiclePricingService(string cachePath)
     {
@@ -57,12 +62,7 @@ public sealed class RealVehiclePricingService
 
     public static RealVehiclePricingService CreateDefault()
     {
-        var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "BeamNGMarketplaceConfigEditor",
-            "Cache");
-        Directory.CreateDirectory(root);
-        return new RealVehiclePricingService(Path.Combine(root, "pricing-cache.json"));
+        return DefaultInstance.Value;
     }
 
     public static void SetBulkAutofillMode(bool enabled)
@@ -444,55 +444,119 @@ public sealed class RealVehiclePricingService
         }
 
         return candidates
-            .OrderByDescending(x => x.Score)
-            .ThenByDescending(x => x.EstimatedValue.HasValue ? 1 : 0)
-            .ThenBy(x => x.SourceUrl?.Length ?? int.MaxValue)
+            .Select(x => new { Candidate = x, RankedScore = ScoreManualLookupCandidate(query, x) })
+            .Where(x => x.RankedScore >= 45)
+            .OrderByDescending(x => x.RankedScore)
+            .ThenByDescending(x => x.Candidate.EstimatedValue.HasValue ? 1 : 0)
+            .ThenBy(x => x.Candidate.SourceUrl?.Length ?? int.MaxValue)
             .Take(5)
             .Select(x =>
             {
-                var recommendation = BuildLookupRecommendation(query, x.EstimatedValue);
-                var finalValue = recommendation.RecommendedValue ?? x.EstimatedValue;
+                var recommendation = BuildLookupRecommendation(query, x.Candidate.EstimatedValue);
+                var finalValue = recommendation.RecommendedValue ?? x.Candidate.EstimatedValue;
                 var finalPopulation = recommendation.RecommendedPopulation ?? EstimatePopulationBandFromValue(finalValue);
-                var evidence = x.Evidence;
-                if (recommendation.RecommendedValue.HasValue || recommendation.RecommendedPopulation.HasValue)
-                {
-                    var recommendationBits = new List<string>();
-                    if (recommendation.RecommendedValue.HasValue)
-                    {
-                        recommendationBits.Add($"recommended price ${recommendation.RecommendedValue.Value:N0}");
-                    }
-
-                    if (recommendation.RecommendedPopulation.HasValue)
-                    {
-                        recommendationBits.Add($"recommended population {recommendation.RecommendedPopulation.Value:N0}");
-                    }
-
-                    if (recommendationBits.Count > 0)
-                    {
-                        evidence = string.IsNullOrWhiteSpace(evidence)
-                            ? "Lookup recommendation: " + string.Join(", ", recommendationBits)
-                            : evidence + " | Lookup recommendation: " + string.Join(", ", recommendationBits);
-                    }
-                }
+                var evidence = BuildManualLookupEvidence(query, x.Candidate, recommendation);
 
                 return new InternetLookupResult
                 {
-                    Brand = query.Make,
-                    Model = query.Model,
-                    YearMin = yearMin,
-                    YearMax = yearMax,
-                    BodyStyle = bodyStyle,
+                    Brand = x.Candidate.CanonicalBrand ?? query.Make,
+                    Model = x.Candidate.CanonicalModel ?? query.Model,
+                    YearMin = x.Candidate.CanonicalYearMin ?? yearMin,
+                    YearMax = x.Candidate.CanonicalYearMax ?? yearMax,
+                    BodyStyle = x.Candidate.CanonicalBodyStyle ?? bodyStyle,
+                    Country = x.Candidate.CanonicalCountry,
+                    Type = x.Candidate.CanonicalType,
                     EstimatedValue = finalValue.HasValue ? RoundValue(finalValue.Value) : null,
                     Population = finalPopulation,
-                    InsuranceClass = insuranceClass,
+                    InsuranceClass = x.Candidate.CanonicalInsuranceClass ?? insuranceClass,
                     Evidence = evidence,
-                    SourceUrl = x.SourceUrl,
-                    SourceName = x.SourceName,
-                    VerificationStatus = x.VerificationStatus,
-                    ConfidenceScore = x.Score
+                    SourceUrl = x.Candidate.SourceUrl,
+                    SourceName = x.Candidate.SourceName,
+                    VerificationStatus = x.Candidate.VerificationStatus,
+                    ConfidenceScore = Math.Max(x.Candidate.Score, x.RankedScore)
                 };
             })
             .ToList();
+    }
+
+    private static int ScoreManualLookupCandidate(RealVehicleQuery query, TrustedLookupCandidate candidate)
+    {
+        var score = candidate.Score;
+        if (!string.IsNullOrWhiteSpace(candidate.VerificationStatus))
+        {
+            score += candidate.VerificationStatus.Equals("Verified", StringComparison.OrdinalIgnoreCase)
+                ? 20
+                : candidate.VerificationStatus.Equals("Likely", StringComparison.OrdinalIgnoreCase)
+                    ? 8
+                    : 0;
+        }
+
+        var combined = $"{candidate.SourceName} {candidate.PageTitle} {candidate.Evidence} {candidate.SourceUrl} {candidate.CanonicalBrand} {candidate.CanonicalModel} {candidate.CanonicalBodyStyle}";
+        if (!string.IsNullOrWhiteSpace(query.Make) && combined.Contains(query.Make, StringComparison.OrdinalIgnoreCase)) score += 16;
+        if (!string.IsNullOrWhiteSpace(query.Model) && combined.Contains(query.Model, StringComparison.OrdinalIgnoreCase)) score += 24;
+        if (query.Year.HasValue && combined.Contains(query.Year.Value.ToString(CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase)) score += 8;
+        if (!string.IsNullOrWhiteSpace(query.BodyStyle) && combined.Contains(query.BodyStyle, StringComparison.OrdinalIgnoreCase)) score += 5;
+        if (candidate.EstimatedValue.HasValue) score += 4;
+        return score;
+    }
+
+    private static string BuildManualLookupEvidence(RealVehicleQuery query, TrustedLookupCandidate candidate, LookupRecommendation recommendation)
+    {
+        var evidence = candidate.Evidence;
+        var quality = new List<string>();
+        if (!string.IsNullOrWhiteSpace(candidate.VerificationStatus))
+        {
+            quality.Add($"match quality {candidate.VerificationStatus}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Make) && candidate.Evidence.Contains(query.Make, StringComparison.OrdinalIgnoreCase))
+        {
+            quality.Add($"make matched {query.Make}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Model) && candidate.Evidence.Contains(query.Model, StringComparison.OrdinalIgnoreCase))
+        {
+            quality.Add($"model matched {query.Model}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.CanonicalBrand) || !string.IsNullOrWhiteSpace(candidate.CanonicalModel))
+        {
+            var canonicalLabel = string.Join(' ', new[] { candidate.CanonicalBrand, candidate.CanonicalModel }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            if (!string.IsNullOrWhiteSpace(canonicalLabel))
+            {
+                quality.Add($"canonical match {canonicalLabel}");
+            }
+        }
+
+        if (quality.Count > 0)
+        {
+            evidence = string.IsNullOrWhiteSpace(evidence)
+                ? string.Join(", ", quality)
+                : evidence + " | " + string.Join(", ", quality);
+        }
+
+        if (recommendation.RecommendedValue.HasValue || recommendation.RecommendedPopulation.HasValue)
+        {
+            var recommendationBits = new List<string>();
+            if (recommendation.RecommendedValue.HasValue)
+            {
+                recommendationBits.Add($"recommended price ${recommendation.RecommendedValue.Value:N0}");
+            }
+
+            if (recommendation.RecommendedPopulation.HasValue)
+            {
+                recommendationBits.Add($"recommended population {recommendation.RecommendedPopulation.Value:N0}");
+            }
+
+            if (recommendationBits.Count > 0)
+            {
+                evidence = string.IsNullOrWhiteSpace(evidence)
+                    ? "Lookup recommendation: " + string.Join(", ", recommendationBits)
+                    : evidence + " | Lookup recommendation: " + string.Join(", ", recommendationBits);
+            }
+        }
+
+        return evidence;
     }
 
     private LookupRecommendation BuildLookupRecommendation(RealVehicleQuery query, double? sourceValue)
@@ -813,6 +877,209 @@ public sealed class RealVehiclePricingService
         return linked.Token;
     }
 
+    private TrustedLookupCandidate DecorateCandidateWithCanonicalIdentity(TrustedLookupCandidate candidate, RealVehicleQuery query, string? title, string? text, string? url)
+    {
+        candidate.PageTitle = CleanLookupTitle(title);
+        candidate.CanonicalBrand = TryInferCanonicalBrand(query, title, text, url);
+        candidate.CanonicalModel = TryInferCanonicalModel(query, title, url, candidate.CanonicalBrand);
+        var years = ExtractCanonicalYears(title, url, query.Year);
+        candidate.CanonicalYearMin = years.min;
+        candidate.CanonicalYearMax = years.max;
+        candidate.CanonicalBodyStyle = TryInferCanonicalBodyStyle(query, title, text, url);
+        candidate.CanonicalType = GuessTypeFromBodyStyle(candidate.CanonicalBodyStyle);
+        candidate.CanonicalInsuranceClass = GuessInsuranceClassFromBodyStyle(candidate.CanonicalBodyStyle);
+        return candidate;
+    }
+
+    private string? TryInferCanonicalBrand(RealVehicleQuery query, string? title, string? text, string? url)
+    {
+        var titleHaystack = NormalizeKey(string.Join(' ', new[] { title, url }.Where(x => !string.IsNullOrWhiteSpace(x))));
+        var textHaystack = NormalizeKey(text);
+        var ruleData = GetLookupRuleData();
+        var candidates = ruleData.BrandToTier.Keys
+            .Concat(ruleData.Profiles.Select(x => x.Brand))
+            .Append(query.Make)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        string? bestBrand = null;
+        var bestScore = 0;
+        foreach (var brand in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(brand))
+            {
+                continue;
+            }
+
+            var brandKey = NormalizeKey(brand);
+            if (string.IsNullOrWhiteSpace(brandKey))
+            {
+                continue;
+            }
+
+            var score = 0;
+            if (!string.IsNullOrWhiteSpace(titleHaystack) && titleHaystack.Contains(brandKey, StringComparison.OrdinalIgnoreCase)) score += 40;
+            if (!string.IsNullOrWhiteSpace(textHaystack) && textHaystack.Contains(brandKey, StringComparison.OrdinalIgnoreCase)) score += 10;
+            if (!string.IsNullOrWhiteSpace(query.Make) && string.Equals(brand, query.Make, StringComparison.OrdinalIgnoreCase)) score += 4;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestBrand = brand;
+            }
+        }
+
+        return bestScore > 0 ? bestBrand : query.Make;
+    }
+
+    private static string? TryInferCanonicalModel(RealVehicleQuery query, string? title, string? url, string? canonicalBrand)
+    {
+        var candidates = new List<string>();
+        var cleanedTitle = CleanLookupTitle(title);
+        if (!string.IsNullOrWhiteSpace(cleanedTitle))
+        {
+            candidates.Add(cleanedTitle!);
+        }
+
+        if (!string.IsNullOrWhiteSpace(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var slug = WebUtility.UrlDecode(uri.AbsolutePath.Replace('/', ' '));
+            if (!string.IsNullOrWhiteSpace(slug))
+            {
+                candidates.Add(slug);
+            }
+        }
+
+        foreach (var candidate in candidates)
+        {
+            var guess = GuessModel(candidate, canonicalBrand ?? query.Make);
+            if (!string.IsNullOrWhiteSpace(guess))
+            {
+                return guess;
+            }
+        }
+
+        return query.Model;
+    }
+
+    private static (int? min, int? max) ExtractCanonicalYears(string? title, string? url, int? fallbackYear)
+    {
+        var haystack = string.Join(' ', new[] { title, url }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        var years = Regex.Matches(haystack, @"\b(19\d{2}|20\d{2})\b")
+            .Select(match => int.TryParse(match.Value, out var value) ? value : (int?)null)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .Distinct()
+            .Take(3)
+            .OrderBy(value => value)
+            .ToList();
+
+        if (years.Count >= 2 && years[^1] - years[0] <= 35)
+        {
+            return (years[0], years[^1]);
+        }
+
+        if (years.Count == 1)
+        {
+            return (years[0], years[0]);
+        }
+
+        return fallbackYear.HasValue ? (fallbackYear.Value, fallbackYear.Value) : (null, null);
+    }
+
+    private static string? TryInferCanonicalBodyStyle(RealVehicleQuery query, string? title, string? text, string? url)
+    {
+        var combined = string.Join(' ', new[] { query.BodyStyle, title, url, text }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        if (string.IsNullOrWhiteSpace(combined))
+        {
+            return query.BodyStyle;
+        }
+
+        var normalized = NormalizeKey(combined);
+        if (!string.IsNullOrWhiteSpace(query.BodyStyle))
+        {
+            var queryBodyStyle = NormalizeKey(query.BodyStyle);
+            if (!string.IsNullOrWhiteSpace(queryBodyStyle) && normalized.Contains(queryBodyStyle, StringComparison.OrdinalIgnoreCase))
+            {
+                return query.BodyStyle;
+            }
+        }
+
+        if (normalized.Contains("truck") || normalized.Contains("trailer") || normalized.Contains("convertible") || normalized.Contains("coupe") ||
+            normalized.Contains("hatch") || normalized.Contains("wagon") || normalized.Contains("van") || normalized.Contains("suv") ||
+            normalized.Contains("cross") || normalized.Contains("sedan"))
+        {
+            return SegmentKeyToBodyStyle(InferSegmentKey(combined));
+        }
+
+        return query.BodyStyle;
+    }
+
+    private static string SegmentKeyToBodyStyle(string? segment)
+    {
+        return NormalizeKey(segment) switch
+        {
+            "commercial_van" => "Commercial Van",
+            "minivan" => "Minivan",
+            "hatchback" => "Hatchback",
+            "convertible" => "Convertible",
+            "coupe" => "Coupe",
+            "wagon" => "Wagon",
+            "truck" => "Truck",
+            "trailer" => "Trailer",
+            "suv" => "SUV",
+            "crossover" => "Crossover",
+            _ => "Sedan"
+        };
+    }
+
+    private static string? GuessTypeFromBodyStyle(string? bodyStyle)
+    {
+        var normalized = NormalizeKey(bodyStyle);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (normalized.Contains("trailer")) return "Trailer";
+        if (normalized.Contains("truck")) return "Truck";
+        if (normalized.Contains("van")) return "Van";
+        if (normalized.Contains("suv") || normalized.Contains("cross")) return "SUV";
+        return "Car";
+    }
+
+    private static string GuessInsuranceClassFromBodyStyle(string? bodyStyle)
+    {
+        var normalized = NormalizeKey(bodyStyle);
+        if (normalized.Contains("trailer") || normalized.Contains("truck") || normalized.Contains("van")) return "commercial";
+        if (normalized.Contains("coupe") || normalized.Contains("convertible") || normalized.Contains("sport")) return "sport";
+        if (normalized.Contains("suv") || normalized.Contains("cross")) return "standard";
+        return "dailyDriver";
+    }
+
+    private static string? CleanLookupTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return null;
+        }
+
+        var cleaned = WebUtility.HtmlDecode(title);
+        foreach (var separator in new[] { " | ", " - ", " — ", " – " })
+        {
+            var index = cleaned.IndexOf(separator, StringComparison.Ordinal);
+            if (index > 0)
+            {
+                cleaned = cleaned.Substring(0, index);
+                break;
+            }
+        }
+
+        cleaned = Regex.Replace(cleaned, @"\s+", " ").Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+    }
+
     private TrustedLookupCandidate? BuildWikipediaSearchFallbackCandidate(string title, string url, RealVehicleQuery query)
     {
         if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(url))
@@ -846,15 +1113,20 @@ public sealed class RealVehiclePricingService
             return null;
         }
 
-        return new TrustedLookupCandidate
-        {
-            SourceName = "Wikipedia",
-            SourceUrl = url,
-            EstimatedValue = null,
-            Score = Math.Min(score, 92),
-            VerificationStatus = score >= 78 ? "Likely" : "Fallback",
-            Evidence = $"Wikipedia search matched '{title}' before page verification completed."
-        };
+        return DecorateCandidateWithCanonicalIdentity(
+            new TrustedLookupCandidate
+            {
+                SourceName = "Wikipedia",
+                SourceUrl = url,
+                EstimatedValue = null,
+                Score = Math.Min(score, 92),
+                VerificationStatus = score >= 78 ? "Likely" : "Fallback",
+                Evidence = $"Wikipedia search matched '{title}' before page verification completed."
+            },
+            query,
+            title,
+            null,
+            url);
     }
 
     private List<TrustedLookupCandidate> QueryWikipediaFirstManualCandidates(RealVehicleQuery query, Action<string>? progress, CancellationToken cancellationToken)
@@ -870,53 +1142,63 @@ public sealed class RealVehiclePricingService
         var results = new List<TrustedLookupCandidate>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var wikiSearchToken = CreateLinkedSourceTimeoutToken(cancellationToken, 3);
-        var wikiUrls = SearchWikipediaUrls(query, progress, wikiSearchToken).Take(3).ToList();
-        foreach (var url in wikiUrls)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (!seen.Add(url))
+            var wikiSearchToken = CreateLinkedSourceTimeoutToken(cancellationToken, 3);
+            var wikiUrls = SearchWikipediaUrls(query, progress, wikiSearchToken).Take(3).ToList();
+            foreach (var url in wikiUrls)
             {
-                continue;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            string title = url;
-            try
-            {
-                if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                if (!seen.Add(url))
                 {
-                    title = Uri.UnescapeDataString(uri.Segments.LastOrDefault()?.Replace('_', ' ')?.Trim('/') ?? url);
+                    continue;
+                }
+
+                string title = url;
+                try
+                {
+                    if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                    {
+                        title = Uri.UnescapeDataString(uri.Segments.LastOrDefault()?.Replace('_', ' ')?.Trim('/') ?? url);
+                    }
+                }
+                catch
+                {
+                }
+
+                var fallback = BuildWikipediaSearchFallbackCandidate(title, url, query);
+                if (fallback != null)
+                {
+                    results.Add(fallback);
                 }
             }
-            catch
-            {
-            }
 
-            var fallback = BuildWikipediaSearchFallbackCandidate(title, url, query);
-            if (fallback != null)
+            foreach (var url in wikiUrls.Take(2))
             {
-                results.Add(fallback);
+                cancellationToken.ThrowIfCancellationRequested();
+                var candidate = TryBuildTrustedLookupCandidate(wikipedia, url, query, progress, CreateLinkedSourceTimeoutToken(cancellationToken, 4));
+                if (candidate == null)
+                {
+                    continue;
+                }
+
+                if (candidate.Score >= 60)
+                {
+                    results.Add(candidate);
+                }
+
+                if (candidate.Score >= 70)
+                {
+                    break;
+                }
             }
         }
-
-        foreach (var url in wikiUrls.Take(2))
+        catch (OperationCanceledException)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var candidate = TryBuildTrustedLookupCandidate(wikipedia, url, query, progress, CreateLinkedSourceTimeoutToken(cancellationToken, 4));
-            if (candidate == null)
+            if (results.Count == 0)
             {
-                continue;
-            }
-
-            if (candidate.Score >= 60)
-            {
-                results.Add(candidate);
-            }
-
-            if (candidate.Score >= 70)
-            {
-                break;
+                throw;
             }
         }
 
@@ -1039,43 +1321,59 @@ public sealed class RealVehiclePricingService
         var sourcesToCheck = _bulkAutofillMode
             ? prioritizedSources.Take(5).ToList()
             : prioritizedSources;
-        foreach (var source in sourcesToCheck)
+
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var sourceToken = CreateLinkedSourceTimeoutToken(cancellationToken, string.Equals(source.Domain, "wikipedia.org", StringComparison.OrdinalIgnoreCase) ? 4 : 3);
-
-            var discoveredUrls = DiscoverTrustedSourceUrls(source, query, progress, sourceToken)
-                .Where(url => UrlMatchesTrustedSource(url, source))
-                .Take(_bulkAutofillMode ? 2 : (string.Equals(source.Domain, "wikipedia.org", StringComparison.OrdinalIgnoreCase) ? 3 : 4))
-                .ToList();
-
-            if (discoveredUrls.Count == 0)
+            foreach (var source in sourcesToCheck)
             {
-                progress?.Invoke($"No candidate pages found for {source.DisplayName}.");
-            }
+                cancellationToken.ThrowIfCancellationRequested();
+                var sourceToken = CreateLinkedSourceTimeoutToken(cancellationToken, string.Equals(source.Domain, "wikipedia.org", StringComparison.OrdinalIgnoreCase) ? 4 : 3);
 
-            foreach (var url in discoveredUrls)
-            {
-                if (!seenUrls.Add(url))
+                var discoveredUrls = DiscoverTrustedSourceUrls(source, query, progress, sourceToken)
+                    .Where(url => UrlMatchesTrustedSource(url, source))
+                    .Take(_bulkAutofillMode ? 2 : (string.Equals(source.Domain, "wikipedia.org", StringComparison.OrdinalIgnoreCase) ? 3 : 4))
+                    .ToList();
+
+                if (discoveredUrls.Count == 0)
                 {
-                    continue;
+                    progress?.Invoke($"No candidate pages found for {source.DisplayName}.");
                 }
 
-                var candidate = TryBuildTrustedLookupCandidate(source, url, query, progress, sourceToken);
-                if (candidate != null && candidate.Score >= 16)
+                foreach (var url in discoveredUrls)
                 {
-                    results.Add(candidate);
+                    if (!seenUrls.Add(url))
+                    {
+                        continue;
+                    }
+
+                    var candidate = TryBuildTrustedLookupCandidate(source, url, query, progress, sourceToken);
+                    if (candidate != null && candidate.Score >= 16)
+                    {
+                        results.Add(candidate);
+                    }
+                }
+
+                if (!_bulkAutofillMode && results.Any(x => string.Equals(x.SourceName, "Wikipedia", StringComparison.OrdinalIgnoreCase) && x.Score >= 70))
+                {
+                    break;
+                }
+
+                if (!_bulkAutofillMode && results.Any(x => x.Score >= 82 && x.EstimatedValue.HasValue))
+                {
+                    break;
+                }
+
+                if (_bulkAutofillMode && results.Any(x => x.EstimatedValue.HasValue))
+                {
+                    break;
                 }
             }
-
-            if (!_bulkAutofillMode && results.Any(x => string.Equals(x.SourceName, "Wikipedia", StringComparison.OrdinalIgnoreCase) && x.Score >= 70))
+        }
+        catch (OperationCanceledException)
+        {
+            if (results.Count == 0)
             {
-                break;
-            }
-
-            if (_bulkAutofillMode && results.Any(x => x.EstimatedValue.HasValue))
-            {
-                break;
+                throw;
             }
         }
 
@@ -1282,15 +1580,20 @@ public sealed class RealVehiclePricingService
                 evidenceBuilder.Append($" | Price signal: ${estimatedValue.Value:N0}");
             }
 
-            return new TrustedLookupCandidate
-            {
-                SourceName = source.DisplayName,
-                SourceUrl = url,
-                EstimatedValue = estimatedValue,
-                Score = score,
-                VerificationStatus = status,
-                Evidence = evidenceBuilder.ToString()
-            };
+            return DecorateCandidateWithCanonicalIdentity(
+                new TrustedLookupCandidate
+                {
+                    SourceName = source.DisplayName,
+                    SourceUrl = url,
+                    EstimatedValue = estimatedValue,
+                    Score = score,
+                    VerificationStatus = status,
+                    Evidence = evidenceBuilder.ToString()
+                },
+                query,
+                title,
+                text,
+                url);
         }
         catch
         {
@@ -1756,16 +2059,17 @@ public sealed class RealVehiclePricingService
     {
         try
         {
-            if (!File.Exists(_cachePath))
+            var json = AtomicFileIO.ReadAllTextWithBackup(_cachePath);
+            if (string.IsNullOrWhiteSpace(json))
             {
                 return new Dictionary<string, PricingCacheEntry>(StringComparer.OrdinalIgnoreCase);
             }
 
-            var json = File.ReadAllText(_cachePath);
             return JsonSerializer.Deserialize<Dictionary<string, PricingCacheEntry>>(json) ?? new Dictionary<string, PricingCacheEntry>(StringComparer.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("pricing-cache-load", ex.Message);
             return new Dictionary<string, PricingCacheEntry>(StringComparer.OrdinalIgnoreCase);
         }
     }
@@ -1792,10 +2096,11 @@ public sealed class RealVehiclePricingService
             }
 
             var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_cachePath, json);
+            AtomicFileIO.WriteAllTextAtomic(_cachePath, json);
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("pricing-cache-save", ex.Message);
             // keep non-blocking
         }
     }
@@ -1921,7 +2226,7 @@ public sealed class RealVehiclePricingService
         {
             Timeout = TimeSpan.FromSeconds(Math.Clamp(_lookupTimeoutSeconds, 3, 30))
         };
-        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BeamNGMarketplaceFixer/1.0 (+https://local.app)");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "BeamNGMarketplaceConfigEditor/1.0 (+https://local.app)");
         return client;
     }
 
@@ -2063,4 +2368,13 @@ public sealed class TrustedLookupCandidate
     public string Evidence { get; set; } = string.Empty;
     public string VerificationStatus { get; set; } = "Fallback";
     public int Score { get; set; }
+    public string? PageTitle { get; set; }
+    public string? CanonicalBrand { get; set; }
+    public string? CanonicalModel { get; set; }
+    public string? CanonicalCountry { get; set; }
+    public string? CanonicalType { get; set; }
+    public string? CanonicalBodyStyle { get; set; }
+    public int? CanonicalYearMin { get; set; }
+    public int? CanonicalYearMax { get; set; }
+    public string? CanonicalInsuranceClass { get; set; }
 }

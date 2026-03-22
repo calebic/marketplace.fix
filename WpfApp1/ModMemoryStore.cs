@@ -22,65 +22,71 @@ public sealed class ModMemoryStore
     {
         try
         {
-            if (!File.Exists(_path))
+            var json = AtomicFileIO.ReadAllTextWithBackup(_path);
+            if (string.IsNullOrWhiteSpace(json))
             {
                 return new PersistedModMemory();
             }
 
-            var json = File.ReadAllText(_path);
             return JsonSerializer.Deserialize<PersistedModMemory>(json, JsonOptions) ?? new PersistedModMemory();
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("mod-memory-load", ex.Message);
             return new PersistedModMemory();
         }
     }
 
     public void SaveFrom(IEnumerable<VehicleConfigItem> items)
     {
+        Save(BuildSnapshot(items));
+    }
+
+    public void Save(PersistedModMemory memory)
+    {
         try
         {
-            var dir = Path.GetDirectoryName(_path);
-            if (!string.IsNullOrWhiteSpace(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-
-            var memory = new PersistedModMemory();
-            foreach (var item in items)
-            {
-                var key = BuildConfigKey(item);
-                memory.Configs[key] = PersistedConfigMemory.From(item);
-
-                var modKey = BuildModKey(item);
-                if (!memory.Mods.TryGetValue(modKey, out var mod))
-                {
-                    mod = new PersistedModEntry
-                    {
-                        ModPath = item.SourcePath,
-                        IsZip = item.IsZip,
-                        ContentCategory = item.ContentCategory,
-                        IsMapMod = item.IsMapMod,
-                        LastUpdatedUtc = DateTime.UtcNow
-                    };
-                    memory.Mods[modKey] = mod;
-                }
-
-                mod.ContentCategory = item.ContentCategory ?? mod.ContentCategory;
-                mod.IsMapMod = item.IsMapMod || mod.IsMapMod;
-                mod.IgnoreFromReview = item.IgnoreFromRenamer || mod.IgnoreFromReview;
-                mod.SourceHintMake = item.SourceHintMake;
-                mod.SourceHintModel = item.SourceHintModel;
-                mod.SourceHintYearMin = item.SourceHintYearMin;
-                mod.SourceHintYearMax = item.SourceHintYearMax;
-                mod.LastUpdatedUtc = DateTime.UtcNow;
-            }
-
-            File.WriteAllText(_path, JsonSerializer.Serialize(memory, JsonOptions));
+            AtomicFileIO.WriteAllTextAtomic(_path, JsonSerializer.Serialize(memory, JsonOptions));
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("mod-memory-save", ex.Message);
         }
+    }
+
+    public static PersistedModMemory BuildSnapshot(IEnumerable<VehicleConfigItem> items)
+    {
+        var memory = new PersistedModMemory();
+        foreach (var item in items)
+        {
+            var key = BuildConfigKey(item);
+            memory.Configs[key] = PersistedConfigMemory.From(item);
+
+            var modKey = BuildModKey(item);
+            if (!memory.Mods.TryGetValue(modKey, out var mod))
+            {
+                mod = new PersistedModEntry
+                {
+                    ModPath = item.SourcePath,
+                    IsZip = item.IsZip,
+                    ContentCategory = item.ContentCategory,
+                    IsMapMod = item.IsMapMod,
+                    LastUpdatedUtc = DateTime.UtcNow
+                };
+                memory.Mods[modKey] = mod;
+            }
+
+            mod.ContentCategory = item.ContentCategory ?? mod.ContentCategory;
+            mod.IsMapMod = item.IsMapMod || mod.IsMapMod;
+            mod.IgnoreFromReview = item.IgnoreFromRenamer || mod.IgnoreFromReview;
+            mod.SourceHintMake = item.SourceHintMake;
+            mod.SourceHintModel = item.SourceHintModel;
+            mod.SourceHintYearMin = item.SourceHintYearMin;
+            mod.SourceHintYearMax = item.SourceHintYearMax;
+            mod.LastUpdatedUtc = DateTime.UtcNow;
+        }
+
+        return memory;
     }
 
     public static string BuildConfigKey(VehicleConfigItem item)
@@ -128,7 +134,19 @@ public sealed class PersistedConfigMemory
     public string? LastAutoFillSource { get; set; }
     public string? LastAutoFillDetail { get; set; }
     public string? InferenceReason { get; set; }
+    public int ConfidenceScore { get; set; }
+    public string? ConfidenceTier { get; set; }
+    public string? IdentityEvidence { get; set; }
+    public string? ValuationEvidence { get; set; }
     public string? ReviewReason { get; set; }
+    public string? ReviewCategory { get; set; }
+    public int ReviewPriority { get; set; }
+    public string? ReviewConflictSummary { get; set; }
+    public string? DecisionOrigin { get; set; }
+    public DateTime? LastDecisionUtc { get; set; }
+    public string? LastLookupSourceName { get; set; }
+    public string? LastLookupSourceUrl { get; set; }
+    public DateTime? LastLookupUtc { get; set; }
     public bool IsSuspicious { get; set; }
     public bool IgnoreFromRenamer { get; set; }
     public string? ContentCategory { get; set; }
@@ -156,7 +174,19 @@ public sealed class PersistedConfigMemory
         LastAutoFillSource = item.LastAutoFillSource,
         LastAutoFillDetail = item.LastAutoFillDetail,
         InferenceReason = item.InferenceReason,
+        ConfidenceScore = item.ConfidenceScore,
+        ConfidenceTier = item.ConfidenceTier,
+        IdentityEvidence = item.IdentityEvidence,
+        ValuationEvidence = item.ValuationEvidence,
         ReviewReason = item.ReviewReason,
+        ReviewCategory = item.ReviewCategory,
+        ReviewPriority = item.ReviewPriority,
+        ReviewConflictSummary = item.ReviewConflictSummary,
+        DecisionOrigin = item.DecisionOrigin,
+        LastDecisionUtc = item.LastDecisionUtc,
+        LastLookupSourceName = item.LastLookupSourceName,
+        LastLookupSourceUrl = item.LastLookupSourceUrl,
+        LastLookupUtc = item.LastLookupUtc,
         IsSuspicious = item.IsSuspicious,
         IgnoreFromRenamer = item.IgnoreFromRenamer,
         ContentCategory = item.ContentCategory,
@@ -185,7 +215,19 @@ public sealed class PersistedConfigMemory
         item.LastAutoFillSource = LastAutoFillSource;
         item.LastAutoFillDetail = LastAutoFillDetail;
         item.InferenceReason = InferenceReason;
+        item.ConfidenceScore = ConfidenceScore;
+        item.ConfidenceTier = ConfidenceTier;
+        item.IdentityEvidence = IdentityEvidence;
+        item.ValuationEvidence = ValuationEvidence;
         item.ReviewReason = ReviewReason;
+        item.ReviewCategory = ReviewCategory;
+        item.ReviewPriority = ReviewPriority;
+        item.ReviewConflictSummary = ReviewConflictSummary;
+        item.DecisionOrigin = DecisionOrigin;
+        item.LastDecisionUtc = LastDecisionUtc;
+        item.LastLookupSourceName = LastLookupSourceName;
+        item.LastLookupSourceUrl = LastLookupSourceUrl;
+        item.LastLookupUtc = LastLookupUtc;
         item.IsSuspicious = IsSuspicious;
         item.IgnoreFromRenamer = IgnoreFromRenamer;
         item.ContentCategory = ContentCategory;

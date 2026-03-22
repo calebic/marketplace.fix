@@ -1,0 +1,10 @@
+Marketplace Fixer Enhanced V1 - Update 12 stabilization pass
+
+What this pass tightened:
+- review truth now prefers the explicit review assessment over older raw missing-field fallback logic
+- value/population-only uncertainty should stop bubbling into active review items when the newer review assessment says identity is otherwise usable
+- added review sort score so config ordering and review queue ordering are driven more by review priority/category truth instead of older NeedsReview + IsSuspicious bias
+- grouped mod review entries now pick their lead category from the strongest flagged config instead of whichever category appears most often
+- manual internet lookup now clears review pressure when both identity and valuation coverage are solid, while still flagging weak-evidence and value-uncertainty cases correctly
+- ignored review count on the Mod Library page now counts distinct mods instead of raw configs
+- minor wording cleanup in the review wizard around optional ZIP rename text/logging

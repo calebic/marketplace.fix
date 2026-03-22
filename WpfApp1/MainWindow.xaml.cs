@@ -62,78 +62,24 @@ public partial class MainWindow : MetroWindow
         public required string Json { get; init; }
     }
 
-    private sealed class ZipScanContext
+    private sealed class StagedItemWrite
     {
-        private readonly Dictionary<string, ZipArchiveEntry> _entries;
-        private readonly Dictionary<string, JsonNode?> _parsedJsonCache = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string?> _licensePlateCache = new(StringComparer.OrdinalIgnoreCase);
-
-        public ZipScanContext(ZipArchive archive)
-        {
-            _entries = archive.Entries
-                .Where(e => !string.IsNullOrWhiteSpace(e.FullName))
-                .GroupBy(e => NormalizeArchivePath(e.FullName), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-        }
-
-        public IEnumerable<ZipArchiveEntry> Entries => _entries.Values;
-
-        public bool Contains(string path) => _entries.ContainsKey(NormalizeArchivePath(path));
-
-        public string? ReadText(string path)
-        {
-            if (!_entries.TryGetValue(NormalizeArchivePath(path), out var entry))
-            {
-                return null;
-            }
-
-            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
-            return reader.ReadToEnd();
-        }
-
-        public JsonNode? ReadJson(string path)
-        {
-            var normalized = NormalizeArchivePath(path);
-            if (_parsedJsonCache.TryGetValue(normalized, out var cached))
-            {
-                return cached;
-            }
-
-            var parsed = ParseJson(ReadText(path) ?? string.Empty);
-            _parsedJsonCache[normalized] = parsed;
-            return parsed;
-        }
-
-        public string? ReadLicensePlate(string path)
-        {
-            var normalized = NormalizeArchivePath(path);
-            if (_licensePlateCache.TryGetValue(normalized, out var cached))
-            {
-                return cached;
-            }
-
-            var jsonText = ReadText(path);
-            var value = jsonText == null ? null : ReadString(ParseJson(jsonText), "licenseName");
-            _licensePlateCache[normalized] = value;
-            return value;
-        }
-
-        private static string NormalizeArchivePath(string path) => path.Replace('\\', '/').TrimStart('/');
+        public required VehicleConfigItem Item { get; init; }
+        public required VehicleConfigItem WorkingCopy { get; init; }
+        public required string Json { get; init; }
     }
-
     private const string DefaultModsPath = @"D:\beamng progress\30\current\mods";
     private const string DefaultRegion = "northAmerica";
     private const string DefaultInsuranceClass = "dailyDriver";
-    private static readonly string PersistedSettingsPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BeamNGMarketplaceConfigEditor",
-        "settings.json");
+    private static readonly string PersistedSettingsPath = AppPaths.SettingsPath;
     private static readonly Uri LightThemeDictionaryUri = new("Themes/AppTheme.Light.xaml", UriKind.Relative);
     private static readonly Uri DarkThemeDictionaryUri = new("Themes/AppTheme.Dark.xaml", UriKind.Relative);
     private VehicleConfigItem? _selected;
     private ICollectionView? _configsView;
     private readonly AutoFillSettings _autoFillSettings = AutoFillSettings.CreateDefaults();
     private readonly VehicleInferenceService _inferenceService;
+    private readonly AutoFillWorkflowService _autoFillWorkflowService;
+    private readonly WorkspaceRefreshCoordinator _refreshCoordinator;
     private bool _hasUnsavedChanges;
     private bool _isLoadingForm;
     private bool _isScanning;
@@ -144,11 +90,13 @@ public partial class MainWindow : MetroWindow
     private bool _reopenLastModsFolderOnStartup = true;
     private bool _holdWeakMatchesForReview = true;
     private bool _openReviewQueueAfterAutoFill = false;
+    private static readonly object FileWriteGate = new();
     private int _lookupTimeoutSeconds = 8;
     private CancellationTokenSource? _scanCts;
+    private readonly List<ModScanRecord> _scannedMods = new();
     private readonly DispatcherTimer _searchRefreshTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private CancellationTokenSource? _autoFillAllCts;
-    private static readonly string ScrapeLogPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BeamNGMarketplaceConfigEditor", "scrape.log");
+    private static readonly string ScrapeLogPath = AppPaths.ScrapeLogPath;
 
     public ObservableCollection<VehicleConfigItem> Configs { get; } = new();
     public ObservableCollection<VehicleConfigItem> FlaggedConfigs { get; } = new();
@@ -173,6 +121,18 @@ public partial class MainWindow : MetroWindow
     {
         _inferenceService = VehicleInferenceService.CreateDefault();
         InitializeComponent();
+        _refreshCoordinator = new WorkspaceRefreshCoordinator(persist => RefreshAllWorkspaceState(persist));
+        _autoFillWorkflowService = new AutoFillWorkflowService(
+            InferWithOptionsAsync,
+            ShouldRouteInferenceToOnlinePass,
+            ShouldHoldForReview,
+            MarkItemForReview,
+            PrepareAutoFillWrite,
+            WriteConfigBatchRequests,
+            SetItemAutoFillState,
+            DescribeItem,
+            BuildInferenceProgressDetail,
+            AppendScrapeLog);
         DataContext = this;
         _searchRefreshTimer.Tick += (_, _) =>
         {
@@ -265,26 +225,38 @@ public partial class MainWindow : MetroWindow
         AutoFillAllButton.IsEnabled = false;
         SetWorkspaceNavigationEnabled(false);
         StatusTextBlock.Text = "Scanning mods...";
-        StatusDetailTextBlock.Text = "Reading zip archives, folders, and vehicle JSON files. Page switching is temporarily locked during scan to avoid UI races.";
+        StatusDetailTextBlock.Text = "Reading mod folders, zip archives, vehicle configs, and map markers. Page switching is temporarily locked during scan to avoid UI races.";
         DashboardRecentActivityTextBlock.Text = "Scan in progress...";
 
         _scanCts = new CancellationTokenSource();
         try
         {
-            var (items, errors) = await Task.Run(() => CollectConfigs(modsPath, _scanCts.Token), _scanCts.Token);
+            var scanResult = await Task.Run(() => ModScannerService.Scan(modsPath, _scanCts.Token), _scanCts.Token);
+            var items = scanResult.Items;
+            var errors = scanResult.Errors;
             Configs.Clear();
             foreach (var item in items)
             {
                 Configs.Add(item);
             }
 
+            _scannedMods.Clear();
+            _scannedMods.AddRange(scanResult.Mods);
+
             _selected = null;
             ClearForm();
             SetupConfigsView();
             ApplyPersistedModMemoryToConfigs();
             RefreshAllWorkspaceState(persist: true);
-            StatusTextBlock.Text = $"Loaded {items.Count} configs. Errors: {errors}.";
-            StatusDetailTextBlock.Text = errors > 0 ? "Some files could not be parsed cleanly. Review logs and flagged items for follow-up." : "Scan completed successfully. Open Configuration Editor to edit configs or Flagged Configs to inspect items that still need attention.";
+
+            var mapOnlyMods = scanResult.Mods.Count(m => m.Kind == ModContentKind.Map);
+            var mixedMods = scanResult.Mods.Count(m => m.Kind == ModContentKind.Mixed);
+            StatusTextBlock.Text = $"Loaded {items.Count} configs from {scanResult.Mods.Count} mod(s). Errors: {errors}.";
+            StatusDetailTextBlock.Text = errors > 0
+                ? "Some files could not be parsed cleanly. Review logs and flagged items for follow-up."
+                : mapOnlyMods > 0 || mixedMods > 0
+                    ? $"Scan completed successfully. Detected {mapOnlyMods} map-only mod(s) and {mixedMods} mixed-content mod(s)."
+                    : "Scan completed successfully. Open Configuration Editor to edit configs or Flagged Configs to inspect items that still need attention.";
             DashboardRecentActivityTextBlock.Text = StatusTextBlock.Text;
             RefreshLogsPage();
         }
@@ -335,7 +307,7 @@ public partial class MainWindow : MetroWindow
         LoadForm(item);
     }
 
-    private void AutoFillMissing_Click(object sender, RoutedEventArgs e)
+    private async void AutoFillMissing_Click(object sender, RoutedEventArgs e)
     {
         if (_selected == null)
         {
@@ -344,34 +316,68 @@ public partial class MainWindow : MetroWindow
             return;
         }
 
-        ApplyInferenceToForm(_selected);
-
-        var defaultYear = _autoFillSettings.Year ?? DateTime.Now.Year;
-
-        if (_autoFillSettings.UseBrand && string.IsNullOrWhiteSpace(BrandTextBox.Text)) BrandTextBox.Text = _autoFillSettings.Brand;
-        if (_autoFillSettings.UseCountry && string.IsNullOrWhiteSpace(CountryTextBox.Text)) CountryTextBox.Text = _autoFillSettings.Country;
-        if (_autoFillSettings.UseType && string.IsNullOrWhiteSpace(TypeTextBox.Text)) TypeTextBox.Text = _autoFillSettings.Type;
-        if (_autoFillSettings.UseBodyStyle && string.IsNullOrWhiteSpace(BodyStyleTextBox.Text)) BodyStyleTextBox.Text = _autoFillSettings.BodyStyle;
-        if (_autoFillSettings.UseConfigType && string.IsNullOrWhiteSpace(ConfigTypeTextBox.Text)) ConfigTypeTextBox.Text = _autoFillSettings.ConfigType;
-
-        if (_autoFillSettings.UseYear)
+        var item = _selected;
+        if (sender is System.Windows.Controls.Button button)
         {
-            if (!ReadInteger(YearMinUpDown.Value).HasValue) YearMinUpDown.Value = defaultYear;
-            if (!ReadInteger(YearMaxUpDown.Value).HasValue) YearMaxUpDown.Value = defaultYear;
+            button.IsEnabled = false;
         }
 
-        if (_autoFillSettings.UseValue && !ValueUpDown.Value.HasValue)
+        BeginAutoFillProgress(1, "Auto-filling selected config...");
+        try
         {
-            ValueUpDown.Value = _autoFillSettings.Value;
-        }
+            var singleResult = await _autoFillWorkflowService.RunSingleAsync(
+                item,
+                CancellationToken.None,
+                detail => UpdateAutoFillProgress(0, 1, "Auto-filling selected config...", detail));
 
-        if (_autoFillSettings.UsePopulation && !ReadInteger(PopulationUpDown.Value).HasValue)
+            ApplyInferenceToForm(singleResult.Inference);
+
+            var defaultYear = _autoFillSettings.Year ?? DateTime.Now.Year;
+
+            if (_autoFillSettings.UseBrand && string.IsNullOrWhiteSpace(BrandTextBox.Text)) BrandTextBox.Text = _autoFillSettings.Brand;
+            if (_autoFillSettings.UseCountry && string.IsNullOrWhiteSpace(CountryTextBox.Text)) CountryTextBox.Text = _autoFillSettings.Country;
+            if (_autoFillSettings.UseType && string.IsNullOrWhiteSpace(TypeTextBox.Text)) TypeTextBox.Text = _autoFillSettings.Type;
+            if (_autoFillSettings.UseBodyStyle && string.IsNullOrWhiteSpace(BodyStyleTextBox.Text)) BodyStyleTextBox.Text = _autoFillSettings.BodyStyle;
+            if (_autoFillSettings.UseConfigType && string.IsNullOrWhiteSpace(ConfigTypeTextBox.Text)) ConfigTypeTextBox.Text = _autoFillSettings.ConfigType;
+
+            if (_autoFillSettings.UseYear)
+            {
+                if (!ReadInteger(YearMinUpDown.Value).HasValue) YearMinUpDown.Value = defaultYear;
+                if (!ReadInteger(YearMaxUpDown.Value).HasValue) YearMaxUpDown.Value = defaultYear;
+            }
+
+            if (_autoFillSettings.UseValue && !ValueUpDown.Value.HasValue)
+            {
+                ValueUpDown.Value = _autoFillSettings.Value;
+            }
+
+            if (_autoFillSettings.UsePopulation && !ReadInteger(PopulationUpDown.Value).HasValue)
+            {
+                PopulationUpDown.Value = _autoFillSettings.Population;
+            }
+
+            UpdateMissingFromForm();
+            SetDirty(true);
+            item.LastAutoFillStatus = singleResult.UsedOnlineStage ? "Completed (online verified)" : "Completed (local match)";
+            item.LastAutoFillSource = singleResult.UsedOnlineStage ? "Workflow core" : "Local workflow";
+            item.LastAutoFillDetail = BuildInferenceProgressDetail(singleResult.Inference);
+            item.NotifyChanges();
+            EndAutoFillProgress("Selected config auto-fill complete.", item.LastAutoFillDetail ?? string.Empty);
+        }
+        catch (Exception ex)
         {
-            PopulationUpDown.Value = _autoFillSettings.Population;
+            EndAutoFillProgress("Selected config auto-fill failed.", ex.Message);
+            System.Windows.MessageBox.Show($"Auto-fill failed: {ex.Message}", "Auto-Fill Missing", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+        finally
+        {
+            if (sender is System.Windows.Controls.Button restoreButton)
+            {
+                restoreButton.IsEnabled = true;
+            }
 
-        UpdateMissingFromForm();
-        SetDirty(true);
+            HideAutoFillOverlay();
+        }
     }
 
     private void InternetLookup_Click(object sender, RoutedEventArgs e)
@@ -388,6 +394,11 @@ public partial class MainWindow : MetroWindow
         };
 
         var accepted = lookupWindow.ShowDialog();
+        if (!string.IsNullOrWhiteSpace(lookupWindow.LastRunSummary))
+        {
+            AppendScrapeLog($"LOOKUP {lookupWindow.LastRunSummary}");
+        }
+
         if (accepted != true || lookupWindow.LookupResult == null)
         {
             return;
@@ -408,13 +419,62 @@ public partial class MainWindow : MetroWindow
         UpdateMissingFromForm();
         SetDirty(true);
 
-        _selected.LastAutoFillStatus = "Lookup applied";
-        _selected.LastAutoFillSource = "Internet lookup";
-        _selected.LastAutoFillDetail = result.Evidence;
+        ApplyLookupDecisionState(_selected, result, "Lookup applied");
         _selected.NotifyChanges();
+        UpdateDecisionDiagnostics(_selected);
     }
 
-    private void ModInternetLookup_Click(object sender, RoutedEventArgs e)
+    private static bool LookupHasStrongValuationCoverage(InternetLookupResult result)
+        => result.EstimatedValue.HasValue
+           && result.EstimatedValue.Value > 0
+           && result.Population.HasValue
+           && result.Population.Value > 0;
+
+    private static string BuildLookupValuationEvidence(InternetLookupResult result)
+        => $"Lookup recommendation applied: value {(result.EstimatedValue.HasValue ? "$" + Math.Round(result.EstimatedValue.Value).ToString("N0", CultureInfo.InvariantCulture) : "n/a")}, population {(result.Population.HasValue ? result.Population.Value.ToString("N0", CultureInfo.InvariantCulture) : "n/a")}.";
+
+    private static void ApplyLookupDecisionState(VehicleConfigItem item, InternetLookupResult result, string statusText)
+    {
+        item.LastAutoFillStatus = statusText;
+        item.LastAutoFillSource = string.IsNullOrWhiteSpace(result.SourceName) ? "Internet lookup" : $"Internet lookup · {result.SourceName}";
+        item.LastAutoFillDetail = result.Evidence;
+        item.DecisionOrigin = "Manual internet lookup";
+        item.LastDecisionUtc = DateTime.UtcNow;
+        item.LastLookupSourceName = result.SourceName;
+        item.LastLookupSourceUrl = result.SourceUrl;
+        item.LastLookupUtc = DateTime.UtcNow;
+        item.ConfidenceScore = result.ConfidenceScore;
+        item.ConfidenceTier = string.IsNullOrWhiteSpace(result.VerificationStatus) ? "Lookup" : result.VerificationStatus;
+        item.IdentityEvidence = result.Evidence;
+        item.ValuationEvidence = (result.EstimatedValue.HasValue || result.Population.HasValue)
+            ? BuildLookupValuationEvidence(result)
+            : item.ValuationEvidence;
+
+        item.IsSuspicious = result.ConfidenceScore < 60;
+        item.ReviewConflictSummary = null;
+
+        if (item.IsSuspicious)
+        {
+            item.ReviewCategory = "Weak evidence";
+            item.ReviewPriority = 35;
+            item.ReviewReason = "Manual lookup only found a weak candidate. Review before trusting it.";
+            return;
+        }
+
+        if (!LookupHasStrongValuationCoverage(result))
+        {
+            item.ReviewCategory = "Value uncertainty";
+            item.ReviewPriority = 8;
+            item.ReviewReason = "Identity looks usable, but pricing confidence should still be treated as advisory until you verify it.";
+            return;
+        }
+
+        item.ReviewCategory = null;
+        item.ReviewPriority = 0;
+        item.ReviewReason = "Manual lookup found a usable identity and pricing recommendation.";
+    }
+
+    private async void ModInternetLookup_Click(object sender, RoutedEventArgs e)
     {
         if (_selected == null)
         {
@@ -428,41 +488,118 @@ public partial class MainWindow : MetroWindow
         };
 
         var accepted = lookupWindow.ShowDialog();
+        if (!string.IsNullOrWhiteSpace(lookupWindow.LastRunSummary))
+        {
+            AppendScrapeLog($"LOOKUP {lookupWindow.LastRunSummary}");
+        }
+
         if (accepted != true || lookupWindow.LookupResult == null)
         {
             return;
         }
 
-        var result = lookupWindow.LookupResult;
-        var modItems = GetSelectedModConfigs().ToList();
-        foreach (var item in modItems)
+        var modItems = GetSelectedModConfigs().Distinct().ToList();
+        if (modItems.Count == 0)
         {
-            if (!string.IsNullOrWhiteSpace(result.Brand)) item.Brand = result.Brand;
-            if (!string.IsNullOrWhiteSpace(result.BodyStyle)) item.BodyStyle = result.BodyStyle;
-            if (!string.IsNullOrWhiteSpace(result.Country)) item.Country = result.Country;
-            if (!string.IsNullOrWhiteSpace(result.Type)) item.Type = result.Type;
-            if (result.YearMin.HasValue) item.YearMin = result.YearMin;
-            if (result.YearMax.HasValue) item.YearMax = result.YearMax;
-            item.LastAutoFillStatus = "Mod lookup applied";
-            item.LastAutoFillSource = "Internet lookup";
-            item.LastAutoFillDetail = result.Evidence;
-            item.NotifyChanges();
+            System.Windows.MessageBox.Show("No configs were found for the currently selected mod.", "Mod Lookup", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
         }
 
-        if (!string.IsNullOrWhiteSpace(result.Brand)) BrandTextBox.Text = result.Brand;
-        if (!string.IsNullOrWhiteSpace(result.Model)) ConfigurationTextBox.Text = result.Model;
-        if (!string.IsNullOrWhiteSpace(result.BodyStyle)) BodyStyleTextBox.Text = result.BodyStyle;
-        if (!string.IsNullOrWhiteSpace(result.Country)) CountryTextBox.Text = result.Country;
-        if (!string.IsNullOrWhiteSpace(result.Type)) TypeTextBox.Text = result.Type;
-        if (result.YearMin.HasValue) YearMinUpDown.Value = result.YearMin;
-        if (result.YearMax.HasValue) YearMaxUpDown.Value = result.YearMax;
-        UpdateMissingFromForm();
-        SetDirty(true);
+        var confirmation = System.Windows.MessageBox.Show(
+            $"Apply the selected lookup result to {modItems.Count} config(s) in {GetSelectedModDisplayName()} and save those shared identity fields now?",
+            "Apply Mod Lookup",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
 
-        StatusTextBlock.Text = $"Applied lookup fields to {modItems.Count} config(s) in {GetSelectedModDisplayName()}.";
-        StatusDetailTextBlock.Text = "Shared mod-level identity fields were updated from the selected lookup result.";
-        DashboardRecentActivityTextBlock.Text = StatusTextBlock.Text;
-        RefreshLicensePlatesPageSummary();
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var result = lookupWindow.LookupResult;
+        var stagedWrites = new List<StagedItemWrite>();
+        foreach (var item in modItems)
+        {
+            stagedWrites.Add(PrepareModLookupWrite(item, result));
+        }
+
+        try
+        {
+            if (sender is System.Windows.Controls.Button triggerButton)
+            {
+                triggerButton.IsEnabled = false;
+            }
+
+            StatusTextBlock.Text = $"Applying mod lookup to {modItems.Count} config(s) in {GetSelectedModDisplayName()}...";
+            StatusDetailTextBlock.Text = "Writing shared mod-level identity fields to disk before updating the workspace.";
+
+            await Task.Run(() => WriteConfigBatch(stagedWrites.Select(x => new PendingConfigWrite
+            {
+                Item = x.Item,
+                Json = x.Json
+            }).ToList(), mirrorToVehicles: true));
+
+            foreach (var staged in stagedWrites)
+            {
+                staged.Item.CopyMutableStateFrom(staged.WorkingCopy);
+                staged.Item.NotifyChanges();
+            }
+
+            if (_selected != null)
+            {
+                LoadForm(_selected);
+                UpdateDecisionDiagnostics(_selected);
+            }
+
+            SetDirty(false);
+            RefreshAllWorkspaceState(persist: false);
+            await SaveModMemorySnapshotAsync();
+            StatusTextBlock.Text = $"Applied and saved lookup fields to {modItems.Count} config(s) in {GetSelectedModDisplayName()}.";
+            StatusDetailTextBlock.Text = "Shared mod-level identity fields were committed safely from the selected lookup result.";
+            DashboardRecentActivityTextBlock.Text = StatusTextBlock.Text;
+            RefreshLicensePlatesPageSummary();
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to apply the mod-wide lookup result: {ex.Message}", "Mod Lookup", MessageBoxButton.OK, MessageBoxImage.Error);
+            StatusTextBlock.Text = "Mod lookup failed.";
+            StatusDetailTextBlock.Text = ex.Message;
+        }
+        finally
+        {
+            if (sender is System.Windows.Controls.Button restoreButton)
+            {
+                restoreButton.IsEnabled = true;
+            }
+        }
+    }
+
+    private void ApplyLookupMetadataToItem(VehicleConfigItem item, InternetLookupResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.Brand)) item.Brand = result.Brand;
+        if (!string.IsNullOrWhiteSpace(result.BodyStyle)) item.BodyStyle = result.BodyStyle;
+        if (!string.IsNullOrWhiteSpace(result.Country)) item.Country = result.Country;
+        if (!string.IsNullOrWhiteSpace(result.Type)) item.Type = result.Type;
+        if (result.YearMin.HasValue) item.YearMin = result.YearMin;
+        if (result.YearMax.HasValue) item.YearMax = result.YearMax;
+        ApplyLookupDecisionState(item, result, "Mod lookup applied");
+    }
+
+    private StagedItemWrite PrepareModLookupWrite(VehicleConfigItem item, InternetLookupResult result)
+    {
+        var workingCopy = item.CreateWorkingCopy();
+        ApplyLookupMetadataToItem(workingCopy, result);
+        var json = BuildJsonForItem(workingCopy);
+        workingCopy.Json = json;
+        ConfigJsonService.UpdateItemFromJson(workingCopy, json, DefaultInsuranceClass, ResolveVehicleInfoRoot(workingCopy));
+        workingCopy.LastAutoFillStatus = "Mod lookup applied";
+        var renderedJson = json.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        return new StagedItemWrite
+        {
+            Item = item,
+            WorkingCopy = workingCopy,
+            Json = renderedJson
+        };
     }
 
     private void OpenLicensePlatesPage_Click(object sender, RoutedEventArgs e)
@@ -731,29 +868,42 @@ public partial class MainWindow : MetroWindow
         }
 
         var writes = new List<PendingConfigWrite>();
+        var stagedWrites = new List<StagedItemWrite>();
         var updated = 0;
+        var bulkEditSource = request.Scope switch
+        {
+            BulkEditScope.SelectedMod => "Bulk edit · selected mod",
+            BulkEditScope.FlaggedConfigs => "Bulk edit · flagged configs",
+            _ => "Bulk edit · filtered results"
+        };
+        var bulkEditDetail = BuildBulkEditSummary(request);
+
         foreach (var item in targets)
         {
             try
             {
-                var updatedJson = BuildJsonForItem(item);
+                var workingCopy = item.CreateWorkingCopy();
+                var updatedJson = BuildJsonForItem(workingCopy);
                 ApplyBulkEditRequestToJson(updatedJson, request);
-                item.Json = updatedJson;
-                var vehicleRoot = ResolveVehicleInfoRoot(item);
-                UpdateItemFromJson(item, updatedJson, vehicleRoot);
+                workingCopy.Json = updatedJson;
+                var vehicleRoot = ResolveVehicleInfoRoot(workingCopy);
+                ConfigJsonService.UpdateItemFromJson(workingCopy, updatedJson, DefaultInsuranceClass, vehicleRoot);
+                workingCopy.LastAutoFillStatus = "Bulk edit applied";
+                workingCopy.LastAutoFillSource = bulkEditSource;
+                workingCopy.LastAutoFillDetail = bulkEditDetail;
+
+                var renderedJson = updatedJson.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
                 writes.Add(new PendingConfigWrite
                 {
                     Item = item,
-                    Json = updatedJson.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
+                    Json = renderedJson
                 });
-                item.LastAutoFillStatus = "Bulk edit applied";
-                item.LastAutoFillSource = request.Scope switch
+                stagedWrites.Add(new StagedItemWrite
                 {
-                    BulkEditScope.SelectedMod => "Bulk edit · selected mod",
-                    BulkEditScope.FlaggedConfigs => "Bulk edit · flagged configs",
-                    _ => "Bulk edit · filtered results"
-                };
-                item.LastAutoFillDetail = BuildBulkEditSummary(request);
+                    Item = item,
+                    WorkingCopy = workingCopy,
+                    Json = renderedJson
+                });
                 updated++;
             }
             catch (Exception ex)
@@ -771,6 +921,12 @@ public partial class MainWindow : MetroWindow
         try
         {
             WriteConfigBatch(writes, mirrorToVehicles: true);
+            foreach (var staged in stagedWrites)
+            {
+                staged.Item.CopyMutableStateFrom(staged.WorkingCopy);
+                staged.Item.NotifyChanges();
+            }
+
             _configsView?.Refresh();
             if (_selected != null)
             {
@@ -778,7 +934,7 @@ public partial class MainWindow : MetroWindow
                 SetDirty(false);
             }
             RefreshAllWorkspaceState(persist: true);
-            AppendScrapeLog($"BULK EDIT SUCCESS {updated} config(s) :: {BuildBulkEditSummary(request)}");
+            AppendScrapeLog($"BULK EDIT SUCCESS {updated} config(s) :: {bulkEditDetail}");
             System.Windows.MessageBox.Show($"Bulk edit applied to {updated} config(s).", "Bulk Edit Fields", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
@@ -1156,7 +1312,7 @@ public partial class MainWindow : MetroWindow
         rendered = null;
         changed = false;
 
-        if (ParseJson(configText) is not JsonObject root)
+        if (ConfigJsonService.ParseJson(configText) is not JsonObject root)
         {
             throw new InvalidDataException("The config .pc file could not be parsed as JSON.");
         }
@@ -1195,8 +1351,8 @@ public partial class MainWindow : MetroWindow
     {
         try
         {
-            var root = ParseJson(jsonText ?? string.Empty);
-            return ReadString(root, "licenseName");
+            var root = ConfigJsonService.ParseJson(jsonText ?? string.Empty);
+            return ConfigJsonService.ReadString(root, "licenseName");
         }
         catch
         {
@@ -1265,16 +1421,35 @@ public partial class MainWindow : MetroWindow
         ApplyInferenceResultToItem(item, inference);
     }
 
-    private void ApplyInferenceResultToItem(VehicleConfigItem item, VehicleInferenceResult inference)
+    private void ApplyInferenceResultToItem(VehicleConfigItem item, VehicleInferenceResult inference, bool notifyChanges = true)
     {
         item.InferenceReason = inference.InferenceReason;
+        item.ConfidenceScore = inference.ConfidenceScore;
+        item.ConfidenceTier = inference.ConfidenceTier;
+        item.IdentityEvidence = inference.BrandEvidence;
+        item.ValuationEvidence = inference.ValueEvidence;
         item.IsSuspicious = inference.IsSuspicious;
-        item.ReviewReason = inference.IsSuspicious ? inference.SuspicionReason ?? inference.BrandEvidence : null;
+        var reviewAssessment = AnalyzeReviewAssessment(item, inference);
+        ApplyReviewAssessment(item, reviewAssessment);
+        item.ReviewReason = inference.IsSuspicious
+            ? inference.SuspicionReason ?? reviewAssessment.Summary ?? inference.BrandEvidence
+            : (!string.IsNullOrWhiteSpace(inference.ConfidenceTier) && inference.ConfidenceScore > 0
+                ? $"{inference.ConfidenceTier} confidence ({inference.ConfidenceScore})."
+                : null);
+        item.DecisionOrigin = !string.IsNullOrWhiteSpace(inference.InferenceReason) && inference.InferenceReason.Contains("User review", StringComparison.OrdinalIgnoreCase)
+            ? "Review input"
+            : (item.VehicleInfoJson != null || !string.IsNullOrWhiteSpace(item.VehicleInfoPath))
+                ? "Vehicle metadata + inference"
+                : "Auto fill inference";
+        item.LastDecisionUtc = DateTime.UtcNow;
 
         if (!inference.HasAnyValue)
         {
             ApplyDefaultAutoFillFallbacksToItem(item);
-            item.NotifyChanges();
+            if (notifyChanges)
+            {
+                item.NotifyChanges();
+            }
             return;
         }
 
@@ -1292,7 +1467,151 @@ public partial class MainWindow : MetroWindow
         if (inference.Population.HasValue && inference.Population.Value > 0) item.Population = inference.Population;
 
         ApplyDefaultAutoFillFallbacksToItem(item);
-        item.NotifyChanges();
+        if (notifyChanges)
+        {
+            item.NotifyChanges();
+        }
+    }
+
+    private Task<VehicleInferenceResult> InferWithOptionsAsync(VehicleConfigItem item, InferenceRunOptions options, Action<string>? progress, CancellationToken cancellationToken)
+    {
+        Action<string>? marshaledProgress = null;
+        if (progress != null)
+        {
+            marshaledProgress = detail => Dispatcher.BeginInvoke(new Action(() => progress(detail)));
+        }
+
+        return Task.Run(() => _inferenceService.Infer(item, marshaledProgress, cancellationToken, options), cancellationToken);
+    }
+
+    private ReviewAssessment AnalyzeReviewAssessment(VehicleConfigItem item, VehicleInferenceResult inference)
+        => ReviewDecisionService.Analyze(item, inference, _holdWeakMatchesForReview);
+
+    private void ApplyReviewAssessment(VehicleConfigItem item, ReviewAssessment assessment)
+    {
+        item.ReviewCategory = string.Equals(assessment.Category, "None", StringComparison.OrdinalIgnoreCase) ? null : assessment.Category;
+        item.ReviewPriority = assessment.Priority;
+        item.ReviewConflictSummary = assessment.ConflictSummary;
+    }
+
+    private bool ShouldRouteInferenceToOnlinePass(VehicleConfigItem item, VehicleInferenceResult inference)
+    {
+        if (item.HasSourceHints || item.IsMapMod || string.Equals(item.ContentCategory, "Map", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!inference.HasAnyValue)
+        {
+            return true;
+        }
+
+        if (inference.IsSuspicious)
+        {
+            return true;
+        }
+
+        if (inference.ConfidenceScore < 72)
+        {
+            return true;
+        }
+
+        if (string.Equals(inference.ConfidenceTier, "Fallback", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var valueMissing = !inference.Value.HasValue || inference.Value.Value <= 0;
+        var populationMissing = !inference.Population.HasValue || inference.Population.Value <= 0;
+        return valueMissing || populationMissing;
+    }
+
+    private bool ShouldHoldForReview(VehicleConfigItem item, VehicleInferenceResult inference)
+    {
+        var assessment = AnalyzeReviewAssessment(item, inference);
+        return assessment.ShouldHold;
+    }
+
+    private void MarkItemForReview(VehicleConfigItem item, VehicleInferenceResult inference, string detail)
+    {
+        item.InferenceReason = inference.InferenceReason;
+        item.ConfidenceScore = inference.ConfidenceScore;
+        item.ConfidenceTier = inference.ConfidenceTier;
+        item.IdentityEvidence = inference.BrandEvidence;
+        item.ValuationEvidence = inference.ValueEvidence;
+        item.IsSuspicious = true;
+        var assessment = AnalyzeReviewAssessment(item, inference);
+        ApplyReviewAssessment(item, assessment);
+        var confidencePrefix = inference.ConfidenceScore > 0
+            ? $"Confidence {inference.ConfidenceScore} ({inference.ConfidenceTier ?? "Fallback"}). "
+            : string.Empty;
+        item.ReviewReason = !string.IsNullOrWhiteSpace(assessment.Summary)
+            ? confidencePrefix + assessment.Summary
+            : !string.IsNullOrWhiteSpace(inference.SuspicionReason)
+                ? confidencePrefix + inference.SuspicionReason
+                : $"{confidencePrefix}Held for review due to low-confidence or conflicting match. {detail}".Trim();
+        item.DecisionOrigin = !string.IsNullOrWhiteSpace(inference.InferenceReason) && inference.InferenceReason.Contains("User review", StringComparison.OrdinalIgnoreCase)
+            ? "Review input"
+            : (item.VehicleInfoJson != null || !string.IsNullOrWhiteSpace(item.VehicleInfoPath))
+                ? "Vehicle metadata + inference"
+                : "Auto fill inference";
+        item.LastDecisionUtc = DateTime.UtcNow;
+    }
+
+    private string RenderItemJson(VehicleConfigItem item)
+    {
+        var json = BuildJsonForItem(item);
+        item.Json = json;
+        return json.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private PreparedConfigWrite PrepareAutoFillWrite(VehicleConfigItem item, VehicleInferenceResult inference)
+    {
+        var workingCopy = item.CreateWorkingCopy();
+        ApplyInferenceResultToItem(workingCopy, inference, notifyChanges: false);
+        var json = BuildJsonForItem(workingCopy);
+        workingCopy.Json = json;
+        var renderedJson = json.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+
+        return new PreparedConfigWrite
+        {
+            Item = item,
+            Json = renderedJson,
+            Commit = () =>
+            {
+                item.CopyMutableStateFrom(workingCopy);
+                item.NotifyChanges();
+                if (ReferenceEquals(_selected, item))
+                {
+                    UpdateDecisionDiagnostics(item);
+                }
+            }
+        };
+    }
+
+    private void WriteConfigBatchRequests(IReadOnlyCollection<ConfigWriteRequest> writes, bool mirrorToVehicles)
+    {
+        bool backupEnabled = false;
+        bool vehiclesMirrorEnabled = false;
+        string modsPath = string.Empty;
+
+        Dispatcher.Invoke(() =>
+        {
+            backupEnabled = BackupToggleSwitch.IsOn;
+            vehiclesMirrorEnabled = VehiclesToggleSwitch?.IsOn == true;
+            modsPath = ModsPathTextBox.Text.Trim();
+        });
+
+        WriteConfigBatchInternal(
+            writes.Select(write => new PendingConfigWrite
+            {
+                Item = write.Item,
+                Json = write.Json
+            }).ToList(),
+            mirrorToVehicles,
+            backupEnabled,
+            vehiclesMirrorEnabled,
+            modsPath);
     }
 
     private string DescribeItem(VehicleConfigItem item)
@@ -1305,14 +1624,26 @@ public partial class MainWindow : MetroWindow
     {
         var parts = new List<string>();
 
-        if (!string.IsNullOrWhiteSpace(inference.Brand) || !string.IsNullOrWhiteSpace(inference.Configuration))
+        if (!string.IsNullOrWhiteSpace(inference.Brand) || !string.IsNullOrWhiteSpace(inference.Model) || !string.IsNullOrWhiteSpace(inference.Configuration))
         {
-            parts.Add($"Vehicle: {string.Join(" ", new[] { inference.Brand, inference.Configuration }.Where(x => !string.IsNullOrWhiteSpace(x)))}".Trim());
+            var identity = string.Join(" ", new[] { inference.Brand, inference.Model }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
+            if (string.IsNullOrWhiteSpace(identity))
+            {
+                identity = inference.Configuration ?? string.Empty;
+            }
+
+            parts.Add($"Identity: {identity}".Trim());
         }
 
         if (!string.IsNullOrWhiteSpace(inference.InferenceReason))
         {
             parts.Add($"Match: {inference.InferenceReason}");
+        }
+
+        if (inference.ConfidenceScore > 0 || !string.IsNullOrWhiteSpace(inference.ConfidenceTier))
+        {
+            var tier = string.IsNullOrWhiteSpace(inference.ConfidenceTier) ? "Unrated" : inference.ConfidenceTier;
+            parts.Add($"Confidence: {tier} ({inference.ConfidenceScore})");
         }
 
         if (inference.Value.HasValue)
@@ -1328,12 +1659,12 @@ public partial class MainWindow : MetroWindow
 
         if (!string.IsNullOrWhiteSpace(inference.BrandEvidence))
         {
-            parts.Add($"Reason: {inference.BrandEvidence}");
+            parts.Add($"Identity evidence: {inference.BrandEvidence}");
         }
 
         if (!string.IsNullOrWhiteSpace(inference.ValueEvidence))
         {
-            parts.Add($"Evidence: {inference.ValueEvidence}");
+            parts.Add($"Value evidence: {inference.ValueEvidence}");
         }
 
         if (inference.IsSuspicious && !string.IsNullOrWhiteSpace(inference.SuspicionReason))
@@ -1389,8 +1720,8 @@ public partial class MainWindow : MetroWindow
         AutoFillOverlayProgressBar.Value = 0;
         AutoFillOverlayStatusTextBlock.Text = status;
         AutoFillOverlayDetailTextBlock.Text = detail;
-        TitleBar.IsHitTestVisible = false;
-        MainWorkspaceGrid.IsEnabled = false;
+        TitleBar.IsHitTestVisible = true;
+        MainWorkspaceGrid.IsEnabled = true;
         AutoFillOverlay.IsHitTestVisible = true;
         AutoFillOverlayCancelButton.IsEnabled = true;
     }
@@ -1416,11 +1747,7 @@ public partial class MainWindow : MetroWindow
     {
         try
         {
-            var dir = Path.GetDirectoryName(ScrapeLogPath);
-            if (!string.IsNullOrWhiteSpace(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
+            AppPaths.EnsureParentDirectory(ScrapeLogPath);
             File.AppendAllText(ScrapeLogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
         }
         catch
@@ -1502,6 +1829,11 @@ public partial class MainWindow : MetroWindow
     private void ApplyInferenceToForm(VehicleConfigItem item)
     {
         var inference = _inferenceService.Infer(item);
+        ApplyInferenceToForm(inference);
+    }
+
+    private void ApplyInferenceToForm(VehicleInferenceResult inference)
+    {
         if (!inference.HasAnyValue)
         {
             return;
@@ -1572,135 +1904,34 @@ public partial class MainWindow : MetroWindow
 
         try
         {
-            var updated = 0;
-            var saved = 0;
-            var failed = 0;
-            var processed = 0;
-            var canceled = false;
-            var sourceGroups = Configs
-                .GroupBy(x => x.SourcePath, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            foreach (var sourceGroup in sourceGroups)
+            _refreshCoordinator.BeginDeferredRefresh();
+            AutoFillWorkflowResult batchResult;
+            try
             {
-                if (_autoFillAllCts.IsCancellationRequested)
-                {
-                    canceled = true;
-                    break;
-                }
-
-                var sourceItems = sourceGroup.ToList();
-                var pendingWrites = new List<PendingConfigWrite>();
-                var completedItems = new List<(VehicleConfigItem Item, VehicleInferenceResult Inference, string Detail, string Source)>();
-                var sourceLabel = Path.GetFileName(sourceGroup.Key);
-
-                foreach (var item in sourceItems)
-                {
-                    if (_autoFillAllCts.IsCancellationRequested)
+                var lastReportedProcessed = -1;
+                batchResult = await _autoFillWorkflowService.RunBatchAsync(
+                    Configs.ToList(),
+                    mirrorToVehicles: true,
+                    _autoFillAllCts.Token,
+                    progress =>
                     {
-                        canceled = true;
-                        break;
-                    }
-
-                    var itemLabel = DescribeItem(item);
-                    SetItemAutoFillState(item, "Running", "Working", $"Starting {itemLabel}");
-                    UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Starting {itemLabel}");
-                    AppendScrapeLog($"START {itemLabel}");
-
-                    try
-                    {
-                        var inference = await Task.Run(() => _inferenceService.Infer(item, detail =>
+                        var force = progress.Processed >= progress.Total || progress.Processed >= lastReportedProcessed + 8;
+                        if (!ShouldPushAutoFillUiProgress(force))
                         {
-                            if (ShouldPushAutoFillUiProgress())
-                            {
-                                Dispatcher.BeginInvoke(new Action(() =>
-                                {
-                                    SetItemAutoFillState(item, "Running", "Working", detail);
-                                    UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"{itemLabel}: {detail}");
-                                }));
-                            }
-                        }, _autoFillAllCts.Token), _autoFillAllCts.Token);
-
-                        var shouldHoldForReview = _holdWeakMatchesForReview && (inference.IsSuspicious || inference.ConfidenceScore < 55 || string.Equals(inference.ConfidenceTier, "Fallback", StringComparison.OrdinalIgnoreCase)) && !item.HasSourceHints;
-                        var detail = BuildInferenceProgressDetail(inference);
-                        if (shouldHoldForReview)
-                        {
-                            item.InferenceReason = inference.InferenceReason;
-                            item.IsSuspicious = true;
-                            item.ReviewReason = !string.IsNullOrWhiteSpace(inference.SuspicionReason)
-                                ? inference.SuspicionReason
-                                : $"Held for review due to low-confidence or conflicting match. {detail}";
-                            processed++;
-                            SetItemAutoFillState(item, "Needs review", "Held for review", detail);
-                            item.NotifyChanges();
-                            UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"{itemLabel}: held for review");
-                            AppendScrapeLog($"HELD {itemLabel} :: {detail}");
-                            continue;
+                            return;
                         }
 
-                        ApplyInferenceResultToItem(item, inference);
-                        var json = BuildJsonForItem(item);
-                        item.Json = json;
-                        var rendered = json.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-                        pendingWrites.Add(new PendingConfigWrite { Item = item, Json = rendered });
-                        var source = string.IsNullOrWhiteSpace(inference.ValueSource) ? "Heuristic/local rules" : inference.ValueSource!;
-                        completedItems.Add((item, inference, detail, source));
-                        SetItemAutoFillState(item, "Running", "Queued", $"Prepared changes for {itemLabel}");
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        canceled = true;
-                        SetItemAutoFillState(item, "Canceled", "Canceled", "Operation canceled by user.");
-                        AppendScrapeLog($"CANCELED {itemLabel}");
-                        break;
-                    }
-                    catch (Exception ex)
-                    {
-                        failed++;
-                        processed++;
-                        SetItemAutoFillState(item, "Failed", "Error", ex.Message);
-                        UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Failed on {itemLabel}: {ex.Message}");
-                        AppendScrapeLog($"FAILED {itemLabel} :: {ex}");
-                    }
-
-                    await Task.Yield();
-                }
-
-                if (completedItems.Count > 0)
+                        lastReportedProcessed = progress.Processed;
+                        UpdateAutoFillProgress(progress.Processed, progress.Total, progress.Status, progress.Detail);
+                    },
+                    operationLabel: "Auto-filling all configs");
+            }
+            catch (OperationCanceledException)
+            {
+                batchResult = new AutoFillWorkflowResult
                 {
-                    try
-                    {
-                        UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Saving {sourceLabel} ({completedItems.Count} configs)");
-                        WriteConfigBatch(pendingWrites, mirrorToVehicles: true);
-
-                        foreach (var completed in completedItems)
-                        {
-                            completed.Item.NotifyChanges();
-                            updated++;
-                            saved++;
-                            processed++;
-                            SetItemAutoFillState(completed.Item, "Completed", completed.Source, completed.Detail);
-                            UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"{DescribeItem(completed.Item)}: {completed.Detail}");
-                            AppendScrapeLog($"SUCCESS {DescribeItem(completed.Item)} :: Source={completed.Source} :: {completed.Detail}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        foreach (var completed in completedItems)
-                        {
-                            failed++;
-                            processed++;
-                            SetItemAutoFillState(completed.Item, "Failed", "Error", ex.Message);
-                            UpdateAutoFillProgress(processed, Configs.Count, $"Auto-filling all configs... {processed}/{Configs.Count}", $"Failed saving {DescribeItem(completed.Item)}: {ex.Message}");
-                            AppendScrapeLog($"FAILED {DescribeItem(completed.Item)} :: {ex}");
-                        }
-                    }
-                }
-
-                if (canceled)
-                {
-                    break;
-                }
+                    WasCanceled = true
+                };
             }
 
             _configsView?.Refresh();
@@ -1710,7 +1941,7 @@ public partial class MainWindow : MetroWindow
                 SetDirty(false);
             }
 
-            if (!canceled)
+            if (!batchResult.WasCanceled)
             {
                 var reviewOutcome = await RunRenamerWizardIfNeededAsync();
                 if (reviewOutcome.ReviewedCount > 0 || reviewOutcome.IgnoredCount > 0 || reviewOutcome.RetriedCount > 0)
@@ -1719,13 +1950,15 @@ public partial class MainWindow : MetroWindow
                 }
             }
 
-            if (canceled)
+            _refreshCoordinator.RequestRefresh(persist: true);
+            if (batchResult.WasCanceled)
             {
-                EndAutoFillProgress($"Auto-fill canceled at {processed}/{Configs.Count}. Updated: {updated}. Saved: {saved}. Failed: {failed}.", $"See scrape log: {ScrapeLogPath}");
+                EndAutoFillProgress($"Auto-fill canceled at {batchResult.Processed}/{Configs.Count}. Updated: {batchResult.Updated}. Saved: {batchResult.Saved}. Failed: {batchResult.Failed}.", $"See scrape log: {ScrapeLogPath}");
             }
             else
             {
-                EndAutoFillProgress($"Auto-fill complete. Updated: {updated}. Saved: {saved}. Failed: {failed}.", $"See scrape log: {ScrapeLogPath}");
+                var detail = $"Local-only: {batchResult.LocalOnlyMatches} · Online-assisted: {batchResult.OnlineMatches} · Held for review: {batchResult.HeldForReview}. See scrape log: {ScrapeLogPath}";
+                EndAutoFillProgress($"Auto-fill complete. Updated: {batchResult.Updated}. Saved: {batchResult.Saved}. Failed: {batchResult.Failed}.", detail);
                 if (_openReviewQueueAfterAutoFill && FlaggedConfigs.Count > 0)
                 {
                     SetWorkspacePage("ReviewQueue");
@@ -1733,8 +1966,17 @@ public partial class MainWindow : MetroWindow
             }
             AppendScrapeLog("=== Auto Fill All finished ===");
         }
+        catch (Exception ex)
+        {
+            EndAutoFillProgress("Auto-fill failed.", ex.Message);
+            StatusTextBlock.Text = "Auto-fill failed.";
+            StatusDetailTextBlock.Text = ex.Message;
+            AppendScrapeLog($"AUTO FILL ALL FAILED :: {ex}");
+            System.Windows.MessageBox.Show($"Auto Fill All failed before finishing.\n\n{ex.Message}", "Auto Fill All", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
         finally
         {
+            _refreshCoordinator.EndDeferredRefresh(defaultPersist: true);
             _autoFillAllCts?.Dispose();
             _autoFillAllCts = null;
             _isAutoFillAllRunning = false;
@@ -1800,8 +2042,8 @@ public partial class MainWindow : MetroWindow
 
         var vehicleInfoPath = !string.IsNullOrWhiteSpace(item.VehicleInfoPath)
             ? item.VehicleInfoPath
-            : BuildVehicleInfoPath(item.InfoPath, item.IsZip);
-        var root = TryLoadVehicleInfoRoot(item.SourcePath, vehicleInfoPath, item.IsZip);
+            : ConfigJsonService.BuildVehicleInfoPath(item.InfoPath, item.IsZip);
+        var root = ConfigJsonService.TryLoadVehicleInfoRoot(item.SourcePath, vehicleInfoPath, item.IsZip);
         if (root != null)
         {
             item.VehicleInfoJson = root;
@@ -1864,7 +2106,7 @@ public partial class MainWindow : MetroWindow
         root["Years"] = years;
     }
 
-    private void SaveChanges_Click(object sender, RoutedEventArgs e)
+    private async void SaveChanges_Click(object sender, RoutedEventArgs e)
     {
         if (_selected == null)
         {
@@ -1879,32 +2121,65 @@ public partial class MainWindow : MetroWindow
             return;
         }
 
-        _selected.Json = updated;
-        UpdateItemFromJson(_selected, updated, ResolveVehicleInfoRoot(_selected));
-
+        var selected = _selected;
+        var originalStatus = StatusTextBlock.Text;
+        var originalDetail = StatusDetailTextBlock.Text;
         var json = updated.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        VehiclesMirrorResult mirrorResult;
+        var backupEnabled = BackupToggleSwitch.IsOn;
+        var vehiclesMirrorEnabled = VehiclesToggleSwitch?.IsOn == true;
+        var modsPath = ModsPathTextBox.Text.Trim();
+
         try
         {
-            var mirrorResult = WriteConfig(_selected, json);
-            _selected.NotifyChanges();
-            LoadForm(_selected);
-            SetDirty(false);
-            RefreshAllWorkspaceState(persist: true);
-            StatusTextBlock.Text = $"Saved {_selected.ConfigKey} ({_selected.ModName}).{mirrorResult.BuildStatusSuffix(_selected.ModelKey)}";
-
-            if (!string.IsNullOrWhiteSpace(mirrorResult.HardError))
+            if (SaveChangesButton != null)
             {
-                System.Windows.MessageBox.Show(
-                    mirrorResult.HardError,
-                    "Input Into Vehicles",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                SaveChangesButton.IsEnabled = false;
             }
+
+            StatusTextBlock.Text = $"Saving {selected.ConfigKey} ({selected.ModName})...";
+            StatusDetailTextBlock.Text = "Writing config changes and any requested vehicle mirror updates.";
+
+            mirrorResult = await Task.Run(() => WriteConfig(selected, json, backupEnabled, vehiclesMirrorEnabled, modsPath));
         }
         catch (Exception ex)
         {
+            StatusTextBlock.Text = originalStatus;
+            StatusDetailTextBlock.Text = originalDetail;
+            if (SaveChangesButton != null)
+            {
+                SaveChangesButton.IsEnabled = _hasUnsavedChanges && _selected != null;
+            }
+
             System.Windows.MessageBox.Show($"Failed to save config: {ex.Message}", "Save Changes",
                 MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        selected.Json = updated;
+        ConfigJsonService.UpdateItemFromJson(selected, updated, DefaultInsuranceClass, ResolveVehicleInfoRoot(selected));
+        selected.NotifyChanges();
+        if (ReferenceEquals(_selected, selected))
+        {
+            LoadForm(selected);
+        }
+
+        SetDirty(false);
+        RefreshWorkspaceAfterSelectedSave();
+        var memorySnapshot = BuildModMemorySnapshot();
+        await SaveModMemorySnapshotAsync(memorySnapshot);
+        StatusTextBlock.Text = $"Saved {selected.ConfigKey} ({selected.ModName}).{mirrorResult.BuildStatusSuffix(selected.ModelKey)}";
+        StatusDetailTextBlock.Text = string.IsNullOrWhiteSpace(mirrorResult.HardError)
+            ? "Config changes were written successfully."
+            : "Config changes were saved, but one or more vehicle mirror steps reported a warning.";
+
+        if (!string.IsNullOrWhiteSpace(mirrorResult.HardError))
+        {
+            System.Windows.MessageBox.Show(
+                mirrorResult.HardError,
+                "Input Into Vehicles",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
     }
 
@@ -1920,7 +2195,7 @@ public partial class MainWindow : MetroWindow
         try
         {
             var jsonText = ReadConfigText(_selected);
-            var root = ParseJson(jsonText);
+            var root = ConfigJsonService.ParseJson(jsonText);
             if (root == null)
             {
                 System.Windows.MessageBox.Show("Failed to parse JSON for the selected config.", "Reload",
@@ -1929,7 +2204,7 @@ public partial class MainWindow : MetroWindow
             }
 
             _selected.Json = root;
-            UpdateItemFromJson(_selected, root, ResolveVehicleInfoRoot(_selected));
+            ConfigJsonService.UpdateItemFromJson(_selected, root, DefaultInsuranceClass, ResolveVehicleInfoRoot(_selected));
             _selected.NotifyChanges();
             LoadForm(_selected);
             SetDirty(false);
@@ -1942,54 +2217,6 @@ public partial class MainWindow : MetroWindow
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
-
-    private (List<VehicleConfigItem> items, int errors) CollectConfigs(string modsPath, CancellationToken token)
-    {
-        var items = new List<VehicleConfigItem>();
-        var errors = 0;
-
-        try
-        {
-            foreach (var modDir in Directory.EnumerateDirectories(modsPath))
-            {
-                token.ThrowIfCancellationRequested();
-                var dirName = Path.GetFileName(modDir);
-                if (string.Equals(dirName, "unpacked", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                AddFolderModConfigs(modDir, dirName, items, ref errors, token);
-            }
-
-            var unpackedRoot = Path.Combine(modsPath, "unpacked");
-            if (Directory.Exists(unpackedRoot))
-            {
-                foreach (var modDir in Directory.EnumerateDirectories(unpackedRoot))
-                {
-                    token.ThrowIfCancellationRequested();
-                    AddFolderModConfigs(modDir, Path.GetFileName(modDir), items, ref errors, token);
-                }
-            }
-
-            foreach (var zipPath in Directory.EnumerateFiles(modsPath, "*.zip"))
-            {
-                token.ThrowIfCancellationRequested();
-                AddZipModConfigs(zipPath, items, ref errors, token);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            errors++;
-        }
-
-        return (items, errors);
-    }
-
     private void SetupConfigsView()
     {
         _configsView = CollectionViewSource.GetDefaultView(Configs);
@@ -2029,6 +2256,7 @@ public partial class MainWindow : MetroWindow
                   contains(item.Country) ||
                   contains(item.InsuranceClass) ||
                   contains(item.ContentCategory) ||
+                  contains(item.SourceCategory) ||
                   contains(item.SourceHintMake) ||
                   contains(item.SourceHintModel) ||
                   contains(item.LastAutoFillStatus) ||
@@ -2100,197 +2328,12 @@ public partial class MainWindow : MetroWindow
         _configsView.SortDescriptions.Clear();
         if (MissingFirstCheckBox?.IsChecked == true)
         {
-            _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.NeedsReview), ListSortDirection.Descending));
-            _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.IsSuspicious), ListSortDirection.Descending));
+            _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.ReviewSortScore), ListSortDirection.Descending));
+            _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.ReviewPriority), ListSortDirection.Descending));
         }
 
         _configsView.SortDescriptions.Add(new SortDescription(nameof(VehicleConfigItem.VehicleName), ListSortDirection.Ascending));
     }
-
-    private void AddFolderModConfigs(string modDir, string modName, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
-    {
-        foreach (var filePath in Directory.EnumerateFiles(modDir, "info_*.json", SearchOption.AllDirectories))
-        {
-            token.ThrowIfCancellationRequested();
-            if (!IsVehicleInfoPath(filePath))
-            {
-                continue;
-            }
-
-            try
-            {
-                var jsonText = File.ReadAllText(filePath);
-                if (!TryCreateConfigItem(modName, modDir, filePath, false, jsonText, out var item))
-                {
-                    errors++;
-                    continue;
-                }
-
-                items.Add(item);
-            }
-            catch
-            {
-                errors++;
-            }
-        }
-    }
-
-    private void AddZipModConfigs(string zipPath, List<VehicleConfigItem> items, ref int errors, CancellationToken token)
-    {
-        var modName = Path.GetFileNameWithoutExtension(zipPath);
-        try
-        {
-            using var archive = ZipFile.OpenRead(zipPath);
-            var scanContext = new ZipScanContext(archive);
-            foreach (var entry in scanContext.Entries)
-            {
-                token.ThrowIfCancellationRequested();
-                if (!IsVehicleInfoEntry(entry.FullName))
-                {
-                    continue;
-                }
-
-                using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
-                var jsonText = reader.ReadToEnd();
-                if (!TryCreateConfigItem(modName, zipPath, entry.FullName, true, jsonText, out var item, scanContext))
-                {
-                    errors++;
-                    continue;
-                }
-
-                items.Add(item);
-            }
-        }
-        catch
-        {
-            errors++;
-        }
-    }
-
-    private bool TryCreateConfigItem(string modName, string sourcePath, string infoPath, bool isZip, string jsonText, out VehicleConfigItem item, ZipScanContext? zipScanContext = null)
-    {
-        item = new VehicleConfigItem();
-
-        if (!TryExtractModelAndConfig(infoPath, isZip, out var modelKey, out var configKey))
-        {
-            return false;
-        }
-
-        var root = ParseJson(jsonText);
-        if (root == null)
-        {
-            return false;
-        }
-
-        var vehicleInfoPath = BuildVehicleInfoPath(infoPath, isZip);
-        var vehicleRoot = TryLoadVehicleInfoRoot(sourcePath, vehicleInfoPath, isZip, zipScanContext);
-
-        var configPcPath = BuildConfigPcPath(infoPath, configKey);
-        var configPcExists = ConfigPcExists(sourcePath, configPcPath, isZip, zipScanContext);
-        var currentLicensePlate = TryReadLicensePlate(sourcePath, configPcPath, isZip, zipScanContext);
-
-        item = new VehicleConfigItem
-        {
-            ModName = modName,
-            SourcePath = sourcePath,
-            InfoPath = infoPath,
-            IsZip = isZip,
-            ModelKey = modelKey,
-            ConfigKey = configKey,
-            ConfigPcPath = configPcPath,
-            HasConfigPc = configPcExists,
-            CurrentLicensePlate = currentLicensePlate,
-            Json = root,
-            VehicleInfoJson = vehicleRoot,
-            VehicleInfoPath = vehicleInfoPath
-        };
-
-        UpdateItemFromJson(item, root, vehicleRoot);
-        item.NotifyChanges();
-        return true;
-    }
-
-    private static JsonNode? ParseJson(string jsonText)
-    {
-        var options = new JsonDocumentOptions
-        {
-            CommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        };
-
-        try
-        {
-            return JsonNode.Parse(jsonText, documentOptions: options);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-
-    private static string BuildConfigPcPath(string infoPath, string configKey)
-    {
-        var normalized = infoPath.Replace('\\', '/');
-        var slashIndex = normalized.LastIndexOf('/');
-        if (slashIndex < 0)
-        {
-            return configKey + ".pc";
-        }
-
-        return normalized.Substring(0, slashIndex + 1) + configKey + ".pc";
-    }
-
-    private static bool ConfigPcExists(string sourcePath, string configPcPath, bool isZip, ZipScanContext? zipScanContext = null)
-    {
-        try
-        {
-            if (!isZip)
-            {
-                return File.Exists(configPcPath.Replace('/', Path.DirectorySeparatorChar));
-            }
-
-            return zipScanContext?.Contains(configPcPath) ?? false;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static string? TryReadLicensePlate(string sourcePath, string configPcPath, bool isZip, ZipScanContext? zipScanContext = null)
-    {
-        try
-        {
-            string? jsonText;
-            if (!isZip)
-            {
-                var filePath = configPcPath.Replace('/', Path.DirectorySeparatorChar);
-                if (!File.Exists(filePath))
-                {
-                    return null;
-                }
-
-                jsonText = File.ReadAllText(filePath);
-            }
-            else
-            {
-                jsonText = zipScanContext?.ReadText(configPcPath);
-                if (jsonText == null)
-                {
-                    return null;
-                }
-            }
-
-            var root = ParseJson(jsonText ?? string.Empty);
-            return ReadString(root, "licenseName");
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private void LoadForm(VehicleConfigItem item)
     {
         _isLoadingForm = true;
@@ -2312,6 +2355,7 @@ public partial class MainWindow : MetroWindow
         
         UpdateFieldHighlightingFromMissing(missing);
         UpdateSummary(item);
+        UpdateDecisionDiagnostics(item);
         SelectedModInfoTextBlock.Text = $"Selected mod: {item.ModName} · Config: {item.ConfigKey}";
         RefreshLicensePlatesPageSummary();
         _isLoadingForm = false;
@@ -2337,6 +2381,7 @@ public partial class MainWindow : MetroWindow
         ConfigSummaryText.Text = string.Empty;
         SelectedModInfoTextBlock.Text = "Select a config to enable config-only and mod-wide actions.";
         ResetFieldHighlighting();
+        UpdateDecisionDiagnostics(null);
         SetDirty(false);
         RefreshLicensePlatesPageSummary();
         _isLoadingForm = false;
@@ -2399,7 +2444,7 @@ public partial class MainWindow : MetroWindow
             return false;
         }
 
-        updated = root;
+        updated = (JsonObject)root.DeepClone();
         updated["Brand"] = brand;
         updated["Country"] = country;
         updated["Type"] = type;
@@ -2427,76 +2472,6 @@ public partial class MainWindow : MetroWindow
 
         return true;
     }
-
-    private static void UpdateItemFromJson(VehicleConfigItem item, JsonNode root, JsonNode? vehicleRoot = null)
-    {
-        if (vehicleRoot != null)
-        {
-            item.VehicleInfoJson = vehicleRoot;
-        }
-
-        var effectiveVehicleRoot = vehicleRoot ?? item.VehicleInfoJson;
-        item.VehicleInfoName = ReadString(effectiveVehicleRoot, "Name");
-        item.VehicleInfoBrand = ReadStringOrAggregate(effectiveVehicleRoot, "Brand");
-        item.VehicleInfoCountry = ReadStringOrAggregate(effectiveVehicleRoot, "Country");
-        item.VehicleInfoType = ReadStringOrAggregate(effectiveVehicleRoot, "Type");
-        item.VehicleInfoBodyStyle = ReadStringOrAggregate(effectiveVehicleRoot, "Body Style");
-
-        var vehicleYears = ReadYears(effectiveVehicleRoot);
-        item.VehicleInfoYearMin = vehicleYears.min;
-        item.VehicleInfoYearMax = vehicleYears.max;
-
-        item.VehicleName = ReadString(root, "Name") ?? item.VehicleInfoName ?? ReadString(root, "Configuration") ?? item.ConfigKey;
-        item.Brand = ReadStringOrAggregate(root, "Brand") ?? item.VehicleInfoBrand;
-        item.Country = ReadStringOrAggregate(root, "Country") ?? item.VehicleInfoCountry;
-        item.Type = ReadStringOrAggregate(root, "Type") ?? item.VehicleInfoType;
-        item.BodyStyle = ReadStringOrAggregate(root, "Body Style") ?? item.VehicleInfoBodyStyle;
-        item.ConfigType = ReadStringOrAggregate(root, "Config Type");
-        item.Configuration = ReadString(root, "Configuration");
-        item.InsuranceClass = ReadStringOrAggregate(root, "InsuranceClass") ?? DefaultInsuranceClass;
-
-        var years = ReadYears(root);
-        item.YearMin = years.min ?? vehicleYears.min;
-        item.YearMax = years.max ?? vehicleYears.max;
-
-        item.Value = ReadDouble(root, "Value");
-        item.Population = ReadInt(root, "Population");
-    }
-
-    private static string BuildVehicleInfoPath(string configInfoPath, bool isZip)
-    {
-        if (isZip)
-        {
-            var normalized = configInfoPath.Replace('\\', '/');
-            var slash = normalized.LastIndexOf('/');
-            if (slash >= 0)
-            {
-                return normalized.Substring(0, slash + 1) + "info.json";
-            }
-            return "info.json";
-        }
-
-        var dir = Path.GetDirectoryName(configInfoPath) ?? string.Empty;
-        return Path.Combine(dir, "info.json");
-    }
-
-    private static JsonNode? TryLoadVehicleInfoRoot(string sourcePath, string vehicleInfoPath, bool isZip, ZipScanContext? zipScanContext = null)
-    {
-        try
-        {
-            if (!isZip)
-            {
-                return File.Exists(vehicleInfoPath) ? ParseJson(File.ReadAllText(vehicleInfoPath)) : null;
-            }
-
-            return zipScanContext?.ReadJson(vehicleInfoPath);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private void UpdateMissingFromForm()
     {
         var missing = new List<string>();
@@ -2557,6 +2532,126 @@ public partial class MainWindow : MetroWindow
         var valueText = item.Value.HasValue ? item.Value.Value.ToString("0", CultureInfo.InvariantCulture) : "Missing";
 
         ConfigSummaryText.Text = $"Missing: {missingText}  •  Population: {populationText}  •  Value: {valueText}";
+    }
+
+    private static string DescribeDecisionOrigin(VehicleConfigItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.DecisionOrigin))
+        {
+            return item.DecisionOrigin!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.LastLookupSourceName) || !string.IsNullOrWhiteSpace(item.LastLookupSourceUrl))
+        {
+            return "Manual internet lookup";
+        }
+
+        if (item.HasSourceHints)
+        {
+            return "Review input";
+        }
+
+        return "Auto fill inference";
+    }
+
+    private static string? TryGetHostLabel(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url;
+    }
+
+    private static string FormatDecisionStamp(DateTime? utc)
+        => utc.HasValue
+            ? utc.Value.ToLocalTime().ToString("yyyy-MM-dd h:mm tt", CultureInfo.InvariantCulture)
+            : "n/a";
+
+    private void UpdateDecisionDiagnostics(VehicleConfigItem? item)
+    {
+        if (DecisionStatusBadgeText == null || DecisionSummaryTextBlock == null || DecisionReviewTextBlock == null || DecisionIdentityEvidenceTextBlock == null || DecisionValuationEvidenceTextBlock == null)
+        {
+            return;
+        }
+
+        if (item == null)
+        {
+            DecisionStatusBadgeText.Text = "Idle";
+            DecisionSummaryTextBlock.Text = "Select a config to see confidence, review pressure, and the latest autofill or lookup reasoning.";
+            DecisionReviewTextBlock.Text = "Review reason: none yet.";
+            DecisionIdentityEvidenceTextBlock.Text = "Identity evidence: none recorded yet.";
+            DecisionValuationEvidenceTextBlock.Text = "Valuation evidence: none recorded yet.";
+            return;
+        }
+
+        var badge = item.IsMapMod
+            ? "Map"
+            : item.NeedsReview
+                ? "Needs review"
+                : !string.IsNullOrWhiteSpace(item.ConfidenceTier)
+                    ? item.ConfidenceTier!
+                    : "Unrated";
+        DecisionStatusBadgeText.Text = badge;
+
+        var summaryParts = new List<string>();
+        if (item.ConfidenceScore > 0 || !string.IsNullOrWhiteSpace(item.ConfidenceTier))
+        {
+            summaryParts.Add($"Confidence {item.ConfidenceScore} ({item.ConfidenceTier ?? "Unrated"})");
+        }
+        if (!string.IsNullOrWhiteSpace(item.LastAutoFillStatus))
+        {
+            summaryParts.Add(item.LastAutoFillStatus!);
+        }
+        if (!string.IsNullOrWhiteSpace(item.LastAutoFillSource))
+        {
+            summaryParts.Add($"Source: {item.LastAutoFillSource}");
+        }
+        if (!string.IsNullOrWhiteSpace(item.DecisionOrigin) || !string.IsNullOrWhiteSpace(item.InferenceReason) || item.HasSourceHints || !string.IsNullOrWhiteSpace(item.LastLookupSourceName) || !string.IsNullOrWhiteSpace(item.LastLookupSourceUrl))
+        {
+            summaryParts.Add($"Origin: {DescribeDecisionOrigin(item)}");
+        }
+        if (item.LastDecisionUtc.HasValue)
+        {
+            summaryParts.Add($"Updated: {FormatDecisionStamp(item.LastDecisionUtc)}");
+        }
+        if (summaryParts.Count == 0)
+        {
+            summaryParts.Add(item.NeedsReview
+                ? "This config still needs review before it should be trusted."
+                : "No captured autofill or lookup reasoning yet.");
+        }
+
+        DecisionSummaryTextBlock.Text = string.Join("  •  ", summaryParts);
+        var reviewHeader = !string.IsNullOrWhiteSpace(item.ReviewCategory)
+            ? $"Review focus: {item.ReviewCategory}"
+            : "Review reason";
+        var reviewPrioritySuffix = item.ReviewPriority > 0 ? $" (priority {item.ReviewPriority})" : string.Empty;
+        var reviewBody = !string.IsNullOrWhiteSpace(item.ReviewReason)
+            ? item.ReviewReason
+            : item.NeedsReview
+                ? $"Missing fields remain ({item.MissingSummary})."
+                : "none currently flagged.";
+        if (!string.IsNullOrWhiteSpace(item.ReviewConflictSummary))
+        {
+            reviewBody = $"{reviewBody} Conflict summary: {item.ReviewConflictSummary}";
+        }
+        DecisionReviewTextBlock.Text = $"{reviewHeader}{reviewPrioritySuffix}: {reviewBody}";
+        var lookupTrail = item.LastLookupUtc.HasValue
+            ? $" Last lookup: {(string.IsNullOrWhiteSpace(item.LastLookupSourceName) ? (TryGetHostLabel(item.LastLookupSourceUrl) ?? "unknown source") : item.LastLookupSourceName)} at {FormatDecisionStamp(item.LastLookupUtc)}."
+            : string.Empty;
+        DecisionIdentityEvidenceTextBlock.Text = !string.IsNullOrWhiteSpace(item.IdentityEvidence)
+            ? $"Identity evidence: {item.IdentityEvidence}{lookupTrail}"
+            : !string.IsNullOrWhiteSpace(item.LastAutoFillDetail)
+                ? $"Identity evidence: {item.LastAutoFillDetail}{lookupTrail}"
+                : $"Identity evidence: none recorded yet.{lookupTrail}";
+        var valuationTrail = !string.IsNullOrWhiteSpace(item.LastLookupSourceUrl)
+            ? $" Source page: {item.LastLookupSourceUrl}"
+            : string.Empty;
+        DecisionValuationEvidenceTextBlock.Text = !string.IsNullOrWhiteSpace(item.ValuationEvidence)
+            ? $"Valuation evidence: {item.ValuationEvidence}{valuationTrail}"
+            : $"Valuation evidence: none recorded yet.{valuationTrail}";
     }
 
     private void PopulationPresetComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2711,21 +2806,22 @@ public partial class MainWindow : MetroWindow
 
     private static PersistedUiSettings? ReadPersistedSettings()
     {
-        if (!File.Exists(PersistedSettingsPath))
-        {
-            return null;
-        }
-
         try
         {
-            var json = File.ReadAllText(PersistedSettingsPath, Encoding.UTF8);
+            var json = AtomicFileIO.ReadAllTextWithBackup(PersistedSettingsPath, Encoding.UTF8);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return null;
+            }
+
             return JsonSerializer.Deserialize<PersistedUiSettings>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("settings-load", ex.Message);
             return null;
         }
     }
@@ -2739,12 +2835,6 @@ public partial class MainWindow : MetroWindow
 
         try
         {
-            var directory = Path.GetDirectoryName(PersistedSettingsPath);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
             var snapshot = new PersistedUiSettings
             {
                 IsDarkTheme = ThemeToggleSwitch?.IsOn == true,
@@ -2764,10 +2854,11 @@ public partial class MainWindow : MetroWindow
             {
                 WriteIndented = true
             });
-            File.WriteAllText(PersistedSettingsPath, json, new UTF8Encoding(false));
+            AtomicFileIO.WriteAllTextAtomic(PersistedSettingsPath, json, new UTF8Encoding(false));
         }
-        catch
+        catch (Exception ex)
         {
+            AppPaths.AppendStateLog("settings-save", ex.Message);
             // Keep app flow non-blocking if settings persistence fails.
         }
     }
@@ -2967,7 +3058,7 @@ public partial class MainWindow : MetroWindow
         }
         catch (Exception ex)
         {
-            AppendScrapeLog($"Manual renamer launch failed: {ex}");
+            AppendScrapeLog($"Manual review wizard launch failed: {ex}");
             System.Windows.MessageBox.Show(ex.Message, "Review Wizard", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -3136,7 +3227,7 @@ public partial class MainWindow : MetroWindow
         }
         catch (Exception ex)
         {
-            AppendScrapeLog($"Renamer queue rebuild failed: {ex}");
+            AppendScrapeLog($"Review queue rebuild failed: {ex}");
             return new List<SourceReviewEntry>();
         }
     }
@@ -3146,8 +3237,10 @@ public partial class MainWindow : MetroWindow
     {
         FlaggedConfigs.Clear();
         foreach (var item in Configs.Where(x => x.NeedsReview)
-                     .OrderByDescending(x => x.IsSuspicious)
-                     .ThenByDescending(x => x.HasMissing)
+                     .OrderByDescending(x => x.ReviewSortScore)
+                     .ThenByDescending(x => x.ReviewPriority)
+                     .ThenByDescending(x => x.IsSuspicious)
+                     .ThenBy(x => x.ReviewCategory ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(x => x.ModName)
                      .ThenBy(x => x.VehicleName))
         {
@@ -3162,11 +3255,17 @@ public partial class MainWindow : MetroWindow
             var missing = Configs.Count(x => x.HasMissing);
             var suspicious = Configs.Count(x => x.IsSuspicious);
             var review = Configs.Count(x => x.NeedsReview);
-            var uniqueMods = Configs
-                .Select(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName)
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
+            var sourceReviewCounts = Configs
+                .GroupBy(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Count(item => item.NeedsReview), StringComparer.OrdinalIgnoreCase);
+
+            var uniqueMods = _scannedMods.Count > 0
+                ? _scannedMods.Count
+                : Configs
+                    .Select(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
             var uniqueBrands = Configs
                 .Select(x => NormalizeSummaryLabel(x.Brand, "Unknown"))
                 .Where(x => !string.Equals(x, "Unknown", StringComparison.OrdinalIgnoreCase))
@@ -3176,9 +3275,21 @@ public partial class MainWindow : MetroWindow
             DashboardMissingCountTextBlock.Text = missing.ToString();
             DashboardSuspiciousCountTextBlock.Text = suspicious.ToString();
             DashboardReviewCountTextBlock.Text = review.ToString();
-            DashboardInstallSummaryTextBlock.Text = Configs.Count == 0
-                ? "Scan a repo to show how many unique mods, brands, and flagged items were detected."
-                : $"Loaded {Configs.Count} configs from {uniqueMods} unique mod(s) across {uniqueBrands} detected brand(s).";
+
+            if (_scannedMods.Count > 0)
+            {
+                var vehicleMods = _scannedMods.Count(x => x.Kind is ModContentKind.Vehicle or ModContentKind.Mixed);
+                var mapMods = _scannedMods.Count(x => x.Kind is ModContentKind.Map or ModContentKind.Mixed);
+                DashboardInstallSummaryTextBlock.Text = Configs.Count == 0
+                    ? $"Scanned {uniqueMods} mod(s): {vehicleMods} vehicle, {mapMods} map-capable."
+                    : $"Loaded {Configs.Count} configs from {uniqueMods} mod(s) across {uniqueBrands} detected brand(s). {mapMods} mod(s) include map content.";
+            }
+            else
+            {
+                DashboardInstallSummaryTextBlock.Text = Configs.Count == 0
+                    ? "Scan a repo to show how many unique mods, brands, and flagged items were detected."
+                    : $"Loaded {Configs.Count} configs from {uniqueMods} unique mod(s) across {uniqueBrands} detected brand(s).";
+            }
 
             DashboardBrandStats.Clear();
             foreach (var stat in Configs
@@ -3212,31 +3323,50 @@ public partial class MainWindow : MetroWindow
             RenamerQueuedCountTextBlock.Text = renamerEntries.Count.ToString();
             DashboardModsCountTextBlock.Text = uniqueMods.ToString();
 
-            var modLibraryItems = Configs
-                .GroupBy(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName, StringComparer.OrdinalIgnoreCase)
-                .Select(g =>
-                {
-                    var displayName = Path.GetFileName(g.Key);
-                    var hasVehicle = g.Any(item => !item.IsMapMod);
-                    var hasMap = g.Any(item => item.IsMapMod);
-                    var category = hasVehicle && hasMap
-                        ? "Mixed"
-                        : hasMap
-                            ? "Map"
-                            : "Vehicle";
-
-                    return new ModLibraryItem
+            List<ModLibraryItem> modLibraryItems;
+            if (_scannedMods.Count > 0)
+            {
+                modLibraryItems = _scannedMods
+                    .Select(mod => new ModLibraryItem
                     {
-                        Label = string.IsNullOrWhiteSpace(displayName) ? g.Key : displayName,
-                        Count = g.Count(),
-                        ReviewCount = g.Count(item => item.NeedsReview),
-                        Category = category
-                    };
-                })
-                .OrderByDescending(item => item.ReviewCount)
-                .ThenByDescending(item => item.Count)
-                .ThenBy(item => item.Label)
-                .ToList();
+                        Label = string.IsNullOrWhiteSpace(mod.Label) ? mod.SourcePath : mod.Label,
+                        Count = mod.VehicleConfigCount > 0 ? mod.VehicleConfigCount : (mod.MapAssetCount > 0 ? 1 : 0),
+                        ReviewCount = sourceReviewCounts.TryGetValue(mod.SourcePath, out var count) ? count : 0,
+                        Category = mod.Kind.ToDisplayLabel()
+                    })
+                    .OrderByDescending(item => item.ReviewCount)
+                    .ThenByDescending(item => item.Count)
+                    .ThenBy(item => item.Label)
+                    .ToList();
+            }
+            else
+            {
+                modLibraryItems = Configs
+                    .GroupBy(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName, StringComparer.OrdinalIgnoreCase)
+                    .Select(g =>
+                    {
+                        var displayName = Path.GetFileName(g.Key);
+                        var hasVehicle = g.Any(item => !item.IsMapMod);
+                        var hasMap = g.Any(item => item.IsMapMod);
+                        var category = hasVehicle && hasMap
+                            ? "Mixed"
+                            : hasMap
+                                ? "Map"
+                                : "Vehicle";
+
+                        return new ModLibraryItem
+                        {
+                            Label = string.IsNullOrWhiteSpace(displayName) ? g.Key : displayName,
+                            Count = g.Count(),
+                            ReviewCount = g.Count(item => item.NeedsReview),
+                            Category = category
+                        };
+                    })
+                    .OrderByDescending(item => item.ReviewCount)
+                    .ThenByDescending(item => item.Count)
+                    .ThenBy(item => item.Label)
+                    .ToList();
+            }
 
             ModLibraryItems.Clear();
             foreach (var item in modLibraryItems)
@@ -3247,7 +3377,13 @@ public partial class MainWindow : MetroWindow
             RenamerDetectedModsCountTextBlock.Text = uniqueMods.ToString();
             RenamerVehicleModsCountTextBlock.Text = modLibraryItems.Count(item => item.Category is "Vehicle" or "Mixed").ToString();
             RenamerMapModsCountTextBlock.Text = modLibraryItems.Count(item => item.Category is "Map" or "Mixed").ToString();
-            RenamerIgnoredCountTextBlock.Text = $"{Configs.Count(x => x.IgnoreFromRenamer)} mod(s) are currently ignored from review retry passes.";
+            var ignoredModCount = Configs
+                .Where(x => x.IgnoreFromRenamer)
+                .Select(x => !string.IsNullOrWhiteSpace(x.SourcePath) ? x.SourcePath : x.ModName)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            RenamerIgnoredCountTextBlock.Text = $"{ignoredModCount} mod(s) are currently ignored from review retry passes.";
             RefreshFlaggedConfigsCollection();
             ReviewQueueSummaryTextBlock.Text = review == 0
                 ? "Nothing is currently flagged. Run a scan or Auto Fill All to populate this list when needed."
@@ -4423,26 +4559,34 @@ public partial class MainWindow : MetroWindow
         }
     }
 
-    private VehiclesMirrorResult WriteConfig(VehicleConfigItem item, string json)
+    private VehiclesMirrorResult WriteConfig(VehicleConfigItem item, string json, bool backupEnabled, bool vehiclesMirrorEnabled, string modsPath)
     {
-        WriteConfigBatch(new[]
+        WriteConfigBatchInternal(new[]
         {
             new PendingConfigWrite
             {
                 Item = item,
                 Json = json
             }
-        }, mirrorToVehicles: false);
+        }, mirrorToVehicles: false, backupEnabled, vehiclesMirrorEnabled, modsPath);
 
-        if (VehiclesToggleSwitch?.IsOn != true)
+        if (!vehiclesMirrorEnabled)
         {
             return VehiclesMirrorResult.NotRequested();
         }
 
-        return MirrorConfigBundleToVehicles(item, json, ModsPathTextBox.Text.Trim());
+        return MirrorConfigBundleToVehicles(item, json, modsPath);
     }
 
     private void WriteConfigBatch(IReadOnlyCollection<PendingConfigWrite> writes, bool mirrorToVehicles)
+    {
+        var backupEnabled = BackupToggleSwitch.IsOn;
+        var vehiclesMirrorEnabled = VehiclesToggleSwitch?.IsOn == true;
+        var modsPath = ModsPathTextBox.Text.Trim();
+        WriteConfigBatchInternal(writes, mirrorToVehicles, backupEnabled, vehiclesMirrorEnabled, modsPath);
+    }
+
+    private void WriteConfigBatchInternal(IReadOnlyCollection<PendingConfigWrite> writes, bool mirrorToVehicles, bool backupEnabled, bool vehiclesMirrorEnabled, string modsPath)
     {
         if (writes == null || writes.Count == 0)
         {
@@ -4453,53 +4597,61 @@ public partial class MainWindow : MetroWindow
         {
             var sourceWrites = sourceGroup.ToList();
             var firstItem = sourceWrites[0].Item;
-            EnsureBackupExists(firstItem);
 
-            if (firstItem.IsZip)
+            lock (FileWriteGate)
             {
-                var entryJsonMap = sourceWrites.ToDictionary(
-                    x => NormalizeZipEntryPath(x.Item.InfoPath),
-                    x => x.Json,
-                    StringComparer.OrdinalIgnoreCase);
-                var replacementNames = sourceWrites.ToDictionary(
-                    x => NormalizeZipEntryPath(x.Item.InfoPath),
-                    x => x.Item.InfoPath,
-                    StringComparer.OrdinalIgnoreCase);
-                WriteZipEntries(firstItem.SourcePath, entryJsonMap, replacementNames);
-            }
-            else
-            {
-                foreach (var write in sourceWrites)
+                EnsureBackupExists(firstItem, backupEnabled);
+
+                if (firstItem.IsZip)
                 {
-                    File.WriteAllText(write.Item.InfoPath, write.Json, new UTF8Encoding(false));
+                    var entryJsonMap = sourceWrites.ToDictionary(
+                        x => NormalizeZipEntryPath(x.Item.InfoPath),
+                        x => x.Json,
+                        StringComparer.OrdinalIgnoreCase);
+                    var replacementNames = sourceWrites.ToDictionary(
+                        x => NormalizeZipEntryPath(x.Item.InfoPath),
+                        x => x.Item.InfoPath,
+                        StringComparer.OrdinalIgnoreCase);
+                    WriteZipEntries(firstItem.SourcePath, entryJsonMap, replacementNames);
                 }
-            }
-
-            if (mirrorToVehicles && VehiclesToggleSwitch?.IsOn == true)
-            {
-                var modsPath = ModsPathTextBox.Text.Trim();
-                foreach (var write in sourceWrites)
+                else
                 {
-                    MirrorConfigBundleToVehicles(write.Item, write.Json, modsPath);
+                    foreach (var write in sourceWrites)
+                    {
+                        WriteTextFileAtomically(write.Item.InfoPath, write.Json);
+                    }
+                }
+
+                if (mirrorToVehicles && vehiclesMirrorEnabled)
+                {
+                    var mirroredAssetGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var write in sourceWrites)
+                    {
+                        var mirrorGroupKey = $"{write.Item.SourcePath}|{write.Item.ModelKey}";
+                        var copySharedAssets = mirroredAssetGroups.Add(mirrorGroupKey);
+                        MirrorConfigBundleToVehicles(write.Item, write.Json, modsPath, copySharedAssets);
+                    }
                 }
             }
         }
     }
 
-    private void EnsureBackupExists(VehicleConfigItem item)
+    private static void EnsureBackupExists(VehicleConfigItem item, bool backupEnabled)
     {
-        if (BackupToggleSwitch.IsOn)
+        if (!backupEnabled)
         {
-            var backupTarget = item.IsZip ? item.SourcePath : item.InfoPath;
-            var backupPath = backupTarget + ".bak";
-            if (!File.Exists(backupPath))
-            {
-                File.Copy(backupTarget, backupPath);
-            }
+            return;
+        }
+
+        var backupTarget = item.IsZip ? item.SourcePath : item.InfoPath;
+        var backupPath = backupTarget + ".bak";
+        if (!File.Exists(backupPath))
+        {
+            File.Copy(backupTarget, backupPath);
         }
     }
 
-    private VehiclesMirrorResult MirrorConfigBundleToVehicles(VehicleConfigItem item, string updatedInfoJson, string modsPath)
+    private VehiclesMirrorResult MirrorConfigBundleToVehicles(VehicleConfigItem item, string updatedInfoJson, string modsPath, bool copySharedAssets = true)
     {
         var result = VehiclesMirrorResult.Requested();
         var vehiclesRoot = ResolveVehiclesRoot(modsPath, out var resolveWarning);
@@ -4509,36 +4661,42 @@ public partial class MainWindow : MetroWindow
             return result;
         }
 
-        try
+        lock (FileWriteGate)
         {
-            var destinationModelDir = Path.Combine(vehiclesRoot, item.ModelKey);
-            Directory.CreateDirectory(destinationModelDir);
-
-            var infoFileName = Path.GetFileName(item.InfoPath.Replace('/', '\\'));
-            var destinationInfoPath = Path.Combine(destinationModelDir, infoFileName);
-            File.WriteAllText(destinationInfoPath, updatedInfoJson, new UTF8Encoding(false));
-            result.InfoCopied = true;
-
-            if (item.IsZip)
+            try
             {
-                CopyMirrorAssetsFromZip(item, destinationModelDir, result);
+                var destinationModelDir = Path.Combine(vehiclesRoot, item.ModelKey);
+                Directory.CreateDirectory(destinationModelDir);
+
+                var infoFileName = Path.GetFileName(item.InfoPath.Replace('/', '\\'));
+                var destinationInfoPath = Path.Combine(destinationModelDir, infoFileName);
+                WriteTextFileAtomically(destinationInfoPath, updatedInfoJson);
+                result.InfoCopied = true;
+
+                if (copySharedAssets)
+                {
+                    if (item.IsZip)
+                    {
+                        CopyMirrorAssetsFromZip(item, destinationModelDir, result);
+                    }
+                    else
+                    {
+                        CopyMirrorAssetsFromFolder(item, destinationModelDir, result);
+                    }
+                }
             }
-            else
+            catch (UnauthorizedAccessException ex)
             {
-                CopyMirrorAssetsFromFolder(item, destinationModelDir, result);
+                result.HardError = $"Saved the mod config, but copying to vehicles failed due to access permissions: {ex.Message}";
             }
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            result.HardError = $"Saved the mod config, but copying to vehicles failed due to access permissions: {ex.Message}";
-        }
-        catch (IOException ex)
-        {
-            result.HardError = $"Saved the mod config, but copying to vehicles failed due to an I/O error: {ex.Message}";
-        }
-        catch (Exception ex)
-        {
-            result.HardError = $"Saved the mod config, but vehicles mirror failed unexpectedly: {ex.Message}";
+            catch (IOException ex)
+            {
+                result.HardError = $"Saved the mod config, but copying to vehicles failed due to an I/O error: {ex.Message}";
+            }
+            catch (Exception ex)
+            {
+                result.HardError = $"Saved the mod config, but vehicles mirror failed unexpectedly: {ex.Message}";
+            }
         }
 
         return result;
@@ -4858,89 +5016,170 @@ public partial class MainWindow : MetroWindow
             null);
     }
 
-    private static void WriteZipEntries(string zipPath, IReadOnlyDictionary<string, string> entryJsonMap, IReadOnlyDictionary<string, string>? replacementNames)
+    private static string BuildTemporaryWritePath(string path, string suffix)
     {
-        if (string.IsNullOrWhiteSpace(zipPath))
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
         {
-            throw new ArgumentException("Zip path is required.", nameof(zipPath));
+            directory = Environment.CurrentDirectory;
         }
 
-        if (!File.Exists(zipPath))
-        {
-            throw new FileNotFoundException("Zip file not found.", zipPath);
-        }
+        var fileName = Path.GetFileName(path);
+        return Path.Combine(directory, $"{fileName}.{Guid.NewGuid():N}.{suffix}");
+    }
 
-        if (entryJsonMap == null || entryJsonMap.Count == 0)
-        {
-            return;
-        }
-
-        var normalizedMap = entryJsonMap.ToDictionary(kvp => NormalizeZipEntryPath(kvp.Key), kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-        var zipDirectory = Path.GetDirectoryName(zipPath);
-        if (string.IsNullOrWhiteSpace(zipDirectory))
-        {
-            zipDirectory = Environment.CurrentDirectory;
-        }
-
-        var tempZipPath = Path.Combine(zipDirectory, Path.GetFileName(zipPath) + ".writing");
-        if (File.Exists(tempZipPath))
-        {
-            File.Delete(tempZipPath);
-        }
-
+    private static void ReplaceFileAtomically(string tempPath, string destinationPath)
+    {
+        var backupPath = BuildTemporaryWritePath(destinationPath, "replacebak");
         try
         {
-            using (var sourceArchive = ZipFile.OpenRead(zipPath))
-            using (var tempArchive = ZipFile.Open(tempZipPath, ZipArchiveMode.Create))
+            if (!File.Exists(destinationPath))
             {
-                var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                File.Move(tempPath, destinationPath);
+                return;
+            }
 
-                foreach (var existingEntry in sourceArchive.Entries)
+            try
+            {
+                File.Replace(tempPath, destinationPath, backupPath, true);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                File.Copy(tempPath, destinationPath, true);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                File.Copy(tempPath, destinationPath, true);
+            }
+            catch (IOException)
+            {
+                File.Copy(tempPath, destinationPath, true);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+
+            if (File.Exists(backupPath))
+            {
+                File.Delete(backupPath);
+            }
+        }
+    }
+
+    private static void WriteTextFileAtomically(string path, string contents)
+    {
+        lock (FileWriteGate)
+        {
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var tempPath = BuildTemporaryWritePath(path, "writing");
+            try
+            {
+                File.WriteAllText(tempPath, contents, new UTF8Encoding(false));
+                ReplaceFileAtomically(tempPath, path);
+            }
+            catch
+            {
+                if (File.Exists(tempPath))
                 {
-                    var normalizedExisting = NormalizeZipEntryPath(existingEntry.FullName);
-                    if (normalizedMap.TryGetValue(normalizedExisting, out var replacementJson))
+                    File.Delete(tempPath);
+                }
+
+                throw;
+            }
+        }
+    }
+
+    private static void WriteZipEntries(string zipPath, IReadOnlyDictionary<string, string> entryJsonMap, IReadOnlyDictionary<string, string>? replacementNames)
+    {
+        lock (FileWriteGate)
+        {
+            if (string.IsNullOrWhiteSpace(zipPath))
+            {
+                throw new ArgumentException("Zip path is required.", nameof(zipPath));
+            }
+
+            if (!File.Exists(zipPath))
+            {
+                throw new FileNotFoundException("Zip file not found.", zipPath);
+            }
+
+            if (entryJsonMap == null || entryJsonMap.Count == 0)
+            {
+                return;
+            }
+
+            var normalizedMap = entryJsonMap
+                .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Key))
+                .ToDictionary(kvp => NormalizeZipEntryPath(kvp.Key), kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+            if (normalizedMap.Count == 0)
+            {
+                return;
+            }
+
+            var tempZipPath = BuildTemporaryWritePath(zipPath, "writing");
+
+            try
+            {
+                using (var sourceArchive = ZipFile.OpenRead(zipPath))
+                using (var tempArchive = ZipFile.Open(tempZipPath, ZipArchiveMode.Create))
+                {
+                    var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var existingEntry in sourceArchive.Entries)
                     {
-                        var replacementEntryName = replacementNames != null && replacementNames.TryGetValue(normalizedExisting, out var knownName)
-                            ? knownName
-                            : existingEntry.FullName;
-                        var replacementEntry = tempArchive.CreateEntry(replacementEntryName, CompressionLevel.Optimal);
-                        replacementEntry.LastWriteTime = DateTimeOffset.Now;
-                        using var replacementWriter = new StreamWriter(replacementEntry.Open(), new UTF8Encoding(false));
-                        replacementWriter.Write(replacementJson);
-                        written.Add(normalizedExisting);
-                        continue;
+                        var normalizedExisting = NormalizeZipEntryPath(existingEntry.FullName);
+                        if (normalizedMap.TryGetValue(normalizedExisting, out var replacementJson))
+                        {
+                            var replacementEntryName = replacementNames != null && replacementNames.TryGetValue(normalizedExisting, out var knownName)
+                                ? knownName
+                                : existingEntry.FullName;
+                            var replacementEntry = tempArchive.CreateEntry(replacementEntryName, CompressionLevel.Optimal);
+                            replacementEntry.LastWriteTime = DateTimeOffset.Now;
+                            using var replacementWriter = new StreamWriter(replacementEntry.Open(), new UTF8Encoding(false));
+                            replacementWriter.Write(replacementJson);
+                            written.Add(normalizedExisting);
+                            continue;
+                        }
+
+                        var copiedEntry = tempArchive.CreateEntry(existingEntry.FullName, CompressionLevel.Optimal);
+                        copiedEntry.LastWriteTime = existingEntry.LastWriteTime;
+                        using var sourceStream = existingEntry.Open();
+                        using var targetStream = copiedEntry.Open();
+                        sourceStream.CopyTo(targetStream);
                     }
 
-                    var copiedEntry = tempArchive.CreateEntry(existingEntry.FullName, CompressionLevel.Optimal);
-                    copiedEntry.LastWriteTime = existingEntry.LastWriteTime;
-                    using var sourceStream = existingEntry.Open();
-                    using var targetStream = copiedEntry.Open();
-                    sourceStream.CopyTo(targetStream);
+                    foreach (var pending in normalizedMap.Where(kvp => !written.Contains(kvp.Key)))
+                    {
+                        var pendingName = replacementNames != null && replacementNames.TryGetValue(pending.Key, out var knownName)
+                            ? knownName
+                            : pending.Key;
+                        var newEntry = tempArchive.CreateEntry(pendingName, CompressionLevel.Optimal);
+                        newEntry.LastWriteTime = DateTimeOffset.Now;
+                        using var writer = new StreamWriter(newEntry.Open(), new UTF8Encoding(false));
+                        writer.Write(pending.Value);
+                    }
                 }
 
-                foreach (var pending in normalizedMap.Where(kvp => !written.Contains(kvp.Key)))
-                {
-                    var pendingName = replacementNames != null && replacementNames.TryGetValue(pending.Key, out var knownName)
-                        ? knownName
-                        : pending.Key;
-                    var newEntry = tempArchive.CreateEntry(pendingName, CompressionLevel.Optimal);
-                    newEntry.LastWriteTime = DateTimeOffset.Now;
-                    using var writer = new StreamWriter(newEntry.Open(), new UTF8Encoding(false));
-                    writer.Write(pending.Value);
-                }
+                ReplaceFileAtomically(tempZipPath, zipPath);
             }
-
-            File.Delete(zipPath);
-            File.Move(tempZipPath, zipPath);
-        }
-        catch
-        {
-            if (File.Exists(tempZipPath))
+            catch
             {
-                File.Delete(tempZipPath);
-            }
+                if (File.Exists(tempZipPath))
+                {
+                    File.Delete(tempZipPath);
+                }
 
-            throw;
+                throw;
+            }
         }
     }
 
@@ -4961,85 +5200,6 @@ public partial class MainWindow : MetroWindow
         using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
         return reader.ReadToEnd();
     }
-
-    private static bool IsVehicleInfoPath(string path)
-    {
-        var normalized = path.Replace('/', '\\');
-        var idx = normalized.IndexOf("\\vehicles\\", StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
-        {
-            return false;
-        }
-
-        var fileName = Path.GetFileName(normalized);
-        return fileName.StartsWith("info_", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsVehicleInfoEntry(string entryName)
-    {
-        if (!entryName.StartsWith("vehicles/", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var fileName = Path.GetFileName(entryName);
-        return fileName.StartsWith("info_", StringComparison.OrdinalIgnoreCase) &&
-               entryName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryExtractModelAndConfig(string path, bool isZip, out string modelKey, out string configKey)
-    {
-        modelKey = string.Empty;
-        configKey = string.Empty;
-
-        var normalized = isZip ? path.Replace('\\', '/') : path.Replace('/', '\\');
-        var marker = isZip ? "vehicles/" : "\\vehicles\\";
-        var idx = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
-        {
-            return false;
-        }
-
-        var relative = normalized.Substring(idx + marker.Length);
-        var parts = isZip
-            ? relative.Split('/', StringSplitOptions.RemoveEmptyEntries)
-            : relative.Split('\\', StringSplitOptions.RemoveEmptyEntries);
-
-        if (parts.Length < 2)
-        {
-            return false;
-        }
-
-        modelKey = parts[0];
-        var fileName = parts[^1];
-        if (!fileName.StartsWith("info_", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var baseName = Path.GetFileNameWithoutExtension(fileName);
-        configKey = baseName.Length > 5 ? baseName.Substring(5) : baseName;
-        return true;
-    }
-
-    private static (int? min, int? max) ReadYears(JsonNode? root)
-    {
-        if (root == null)
-        {
-            return (null, null);
-        }
-
-        var years = root["Years"] as JsonObject ?? root["aggregates"]?["Years"] as JsonObject;
-        if (years == null)
-        {
-            return (null, null);
-        }
-
-        var min = ReadIntFromNode(years["min"]);
-        var max = ReadIntFromNode(years["max"]);
-        return (min, max);
-    }
-
     private static string? ReadString(JsonNode? root, string key)
     {
         if (root == null)
@@ -5054,77 +5214,4 @@ public partial class MainWindow : MetroWindow
 
         return null;
     }
-
-    private static string? ReadStringOrAggregate(JsonNode? root, string key)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        var direct = ReadString(root, key);
-        if (!string.IsNullOrWhiteSpace(direct))
-        {
-            return direct;
-        }
-
-        if (root["aggregates"]?[key] is JsonObject agg)
-        {
-            var values = agg
-                .Where(kvp => kvp.Value is JsonValue v && v.TryGetValue<bool>(out var b) && b)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            if (values.Count > 0)
-            {
-                return string.Join(", ", values);
-            }
-        }
-
-        return null;
-    }
-
-    private static double? ReadDouble(JsonNode? root, string key)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        if (root[key] is JsonValue val && val.TryGetValue<double>(out var result))
-        {
-            return result;
-        }
-
-        return null;
-    }
-
-    private static int? ReadInt(JsonNode? root, string key)
-    {
-        if (root == null)
-        {
-            return null;
-        }
-
-        return ReadIntFromNode(root[key]);
-    }
-
-    private static int? ReadIntFromNode(JsonNode? node)
-    {
-        if (node is JsonValue val)
-        {
-            if (val.TryGetValue<int>(out var result))
-            {
-                return result;
-            }
-
-            if (val.TryGetValue<double>(out var doubleResult))
-            {
-                return (int)doubleResult;
-            }
-        }
-
-        return null;
-    }
 }
-
