@@ -1,0 +1,950 @@
+{
+  "keywords": [
+    {
+      "token": "abt",
+      "valueMultiplier": 1.46,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "ambulance",
+      "valueMultiplier": 1.15,
+      "populationMultiplier": 0.02,
+      "insuranceClass": "commercial",
+      "bodyStyle": "Van",
+      "segment": "commercial_van"
+    },
+    {
+      "token": "amg",
+      "valueMultiplier": 1.35,
+      "populationMultiplier": 0.3
+    },
+    {
+      "token": "anniversary",
+      "valueMultiplier": 1.14,
+      "populationMultiplier": 0.22
+    },
+    {
+      "token": "at4",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.26
+    },
+    {
+      "token": "autobiography",
+      "valueMultiplier": 1.34,
+      "populationMultiplier": 0.1
+    },
+    {
+      "token": "avant",
+      "valueMultiplier": 1.04,
+      "populationMultiplier": 0.65,
+      "bodyStyle": "Wagon",
+      "segment": "luxury_wagon"
+    },
+    {
+      "token": "baja",
+      "valueMultiplier": 1.22,
+      "populationMultiplier": 0.16
+    },
+    {
+      "token": "base",
+      "valueMultiplier": 0.92,
+      "populationMultiplier": 1.18
+    },
+    {
+      "token": "biturbo",
+      "valueMultiplier": 1.22,
+      "populationMultiplier": 0.22
+    },
+    {
+      "token": "black label",
+      "valueMultiplier": 1.3,
+      "populationMultiplier": 0.12
+    },
+    {
+      "token": "box truck",
+      "valueMultiplier": 1.02,
+      "populationMultiplier": 0.08,
+      "insuranceClass": "commercial",
+      "bodyStyle": "Truck",
+      "segment": "heavy_duty_truck"
+    },
+    {
+      "token": "brabus",
+      "valueMultiplier": 1.58,
+      "populationMultiplier": 0.04
+    },
+    {
+      "token": "bus",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.04,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "c63",
+      "valueMultiplier": 1.45,
+      "populationMultiplier": 0.1
+    },
+    {
+      "token": "cargo",
+      "valueMultiplier": 0.98,
+      "populationMultiplier": 0.85,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "clubsport",
+      "valueMultiplier": 1.26,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "competition",
+      "valueMultiplier": 1.3,
+      "populationMultiplier": 0.16
+    },
+    {
+      "token": "convertible",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.35,
+      "bodyStyle": "Convertible"
+    },
+    {
+      "token": "coupe",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.6,
+      "bodyStyle": "Coupe"
+    },
+    {
+      "token": "crawler",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.16
+    },
+    {
+      "token": "crew cab",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.82,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "crossover",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 1.08,
+      "bodyStyle": "SUV",
+      "segment": "crossover"
+    },
+    {
+      "token": "cummins",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.22,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "cupra",
+      "valueMultiplier": 1.24,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "demon",
+      "valueMultiplier": 1.75,
+      "populationMultiplier": 0.03
+    },
+    {
+      "token": "denali",
+      "valueMultiplier": 1.24,
+      "populationMultiplier": 0.36
+    },
+    {
+      "token": "diesel",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.86
+    },
+    {
+      "token": "drag",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "drag spec",
+      "valueMultiplier": 1.24,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "drift",
+      "valueMultiplier": 1.1,
+      "populationMultiplier": 0.28,
+      "segment": "drift_car"
+    },
+    {
+      "token": "drift spec",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.16,
+      "segment": "drift_car"
+    },
+    {
+      "token": "dual motor",
+      "valueMultiplier": 1.14,
+      "populationMultiplier": 0.28
+    },
+    {
+      "token": "dually",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.2,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "duramax",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.24,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "e-hybrid",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "e63",
+      "valueMultiplier": 1.52,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "electric",
+      "valueMultiplier": 1.1,
+      "populationMultiplier": 0.82
+    },
+    {
+      "token": "ems",
+      "valueMultiplier": 1.1,
+      "populationMultiplier": 0.05,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "estate",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.85,
+      "bodyStyle": "Wagon"
+    },
+    {
+      "token": "extended cab",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.62,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "fastback",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.56
+    },
+    {
+      "token": "fire",
+      "valueMultiplier": 1.1,
+      "populationMultiplier": 0.05,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "fire rescue",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.015,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "fleet",
+      "valueMultiplier": 0.94,
+      "populationMultiplier": 1.18
+    },
+    {
+      "token": "gli",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.72
+    },
+    {
+      "token": "gr sport",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.38
+    },
+    {
+      "token": "grmn",
+      "valueMultiplier": 1.34,
+      "populationMultiplier": 0.05
+    },
+    {
+      "token": "gt-r",
+      "valueMultiplier": 1.45,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "gt2",
+      "valueMultiplier": 1.44,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "gt3",
+      "valueMultiplier": 1.58,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "gt4",
+      "valueMultiplier": 1.54,
+      "populationMultiplier": 0.07
+    },
+    {
+      "token": "gti",
+      "valueMultiplier": 1.2,
+      "populationMultiplier": 0.42
+    },
+    {
+      "token": "gti-r",
+      "valueMultiplier": 1.26,
+      "populationMultiplier": 0.22
+    },
+    {
+      "token": "gts",
+      "valueMultiplier": 1.3,
+      "populationMultiplier": 0.28
+    },
+    {
+      "token": "hatch",
+      "valueMultiplier": 0.98,
+      "populationMultiplier": 1.03,
+      "bodyStyle": "Hatchback"
+    },
+    {
+      "token": "hatchback",
+      "valueMultiplier": 0.98,
+      "populationMultiplier": 1.05,
+      "bodyStyle": "Hatchback"
+    },
+    {
+      "token": "hellcat",
+      "valueMultiplier": 1.62,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "high country",
+      "valueMultiplier": 1.22,
+      "populationMultiplier": 0.32
+    },
+    {
+      "token": "highway patrol",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.05,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "hillclimb",
+      "valueMultiplier": 1.28,
+      "populationMultiplier": 0.05
+    },
+    {
+      "token": "hybrid",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.9
+    },
+    {
+      "token": "inscription",
+      "valueMultiplier": 1.1,
+      "populationMultiplier": 0.72
+    },
+    {
+      "token": "king ranch",
+      "valueMultiplier": 1.24,
+      "populationMultiplier": 0.24
+    },
+    {
+      "token": "lariat",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.42
+    },
+    {
+      "token": "launch edition",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.28
+    },
+    {
+      "token": "liftback",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.7,
+      "bodyStyle": "Hatchback"
+    },
+    {
+      "token": "lifted",
+      "valueMultiplier": 1.05,
+      "populationMultiplier": 0.56
+    },
+    {
+      "token": "long bed",
+      "valueMultiplier": 1.02,
+      "populationMultiplier": 0.44,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "long range",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.34
+    },
+    {
+      "token": "lowered",
+      "valueMultiplier": 1.03,
+      "populationMultiplier": 0.62
+    },
+    {
+      "token": "m sport",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.6
+    },
+    {
+      "token": "m3",
+      "valueMultiplier": 1.45,
+      "populationMultiplier": 0.2
+    },
+    {
+      "token": "m5",
+      "valueMultiplier": 1.55,
+      "populationMultiplier": 0.16
+    },
+    {
+      "token": "minivan",
+      "valueMultiplier": 0.94,
+      "populationMultiplier": 0.72,
+      "bodyStyle": "Van",
+      "segment": "minivan"
+    },
+    {
+      "token": "mojave",
+      "valueMultiplier": 1.24,
+      "populationMultiplier": 0.18,
+      "segment": "offroad_suv",
+      "bodyStyle": "Truck"
+    },
+    {
+      "token": "mpv",
+      "valueMultiplier": 0.94,
+      "populationMultiplier": 0.65,
+      "bodyStyle": "Van",
+      "segment": "minivan"
+    },
+    {
+      "token": "naturally aspirated",
+      "valueMultiplier": 1.04,
+      "populationMultiplier": 0.7
+    },
+    {
+      "token": "nismo",
+      "valueMultiplier": 1.3,
+      "populationMultiplier": 0.22
+    },
+    {
+      "token": "nismo s",
+      "valueMultiplier": 1.38,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "offroad",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.58
+    },
+    {
+      "token": "overland",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.25
+    },
+    {
+      "token": "panel",
+      "valueMultiplier": 0.99,
+      "populationMultiplier": 0.65
+    },
+    {
+      "token": "phev",
+      "valueMultiplier": 1.15,
+      "populationMultiplier": 0.42
+    },
+    {
+      "token": "pickup",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.95,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "plaid",
+      "valueMultiplier": 1.62,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "platinum",
+      "valueMultiplier": 1.15,
+      "populationMultiplier": 0.65
+    },
+    {
+      "token": "platinum reserve",
+      "valueMultiplier": 1.26,
+      "populationMultiplier": 0.2
+    },
+    {
+      "token": "plug-in hybrid",
+      "valueMultiplier": 1.15,
+      "populationMultiplier": 0.42
+    },
+    {
+      "token": "police",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.08,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "powerstroke",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.22,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "prestige",
+      "valueMultiplier": 1.2,
+      "populationMultiplier": 0.34
+    },
+    {
+      "token": "pro street",
+      "valueMultiplier": 1.2,
+      "populationMultiplier": 0.12
+    },
+    {
+      "token": "quad cab",
+      "valueMultiplier": 1.04,
+      "populationMultiplier": 0.58,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "quadrifoglio",
+      "valueMultiplier": 1.48,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "quattro",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.52
+    },
+    {
+      "token": "quattroporte",
+      "valueMultiplier": 1.25,
+      "populationMultiplier": 0.18,
+      "segment": "luxury_sedan"
+    },
+    {
+      "token": "r-design",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.7
+    },
+    {
+      "token": "race",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.32
+    },
+    {
+      "token": "rally",
+      "valueMultiplier": 1.14,
+      "populationMultiplier": 0.22,
+      "segment": "rally_car"
+    },
+    {
+      "token": "rallye",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.3
+    },
+    {
+      "token": "raptor",
+      "valueMultiplier": 1.42,
+      "populationMultiplier": 0.1
+    },
+    {
+      "token": "rebel",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.28,
+      "segment": "pickup_truck",
+      "bodyStyle": "Truck"
+    },
+    {
+      "token": "roadster",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.22,
+      "bodyStyle": "Convertible"
+    },
+    {
+      "token": "rotary",
+      "valueMultiplier": 1.22,
+      "populationMultiplier": 0.14
+    },
+    {
+      "token": "rs3",
+      "valueMultiplier": 1.44,
+      "populationMultiplier": 0.1
+    },
+    {
+      "token": "rs4",
+      "valueMultiplier": 1.46,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "rs6",
+      "valueMultiplier": 1.58,
+      "populationMultiplier": 0.05
+    },
+    {
+      "token": "rspec",
+      "valueMultiplier": 1.14,
+      "populationMultiplier": 0.32
+    },
+    {
+      "token": "rubicon",
+      "valueMultiplier": 1.28,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "s line",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.58
+    },
+    {
+      "token": "s3",
+      "valueMultiplier": 1.28,
+      "populationMultiplier": 0.2
+    },
+    {
+      "token": "s4",
+      "valueMultiplier": 1.32,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "s6",
+      "valueMultiplier": 1.4,
+      "populationMultiplier": 0.12
+    },
+    {
+      "token": "saloon",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.82,
+      "bodyStyle": "Sedan"
+    },
+    {
+      "token": "sasquatch",
+      "valueMultiplier": 1.24,
+      "populationMultiplier": 0.12,
+      "segment": "offroad_suv"
+    },
+    {
+      "token": "scat pack",
+      "valueMultiplier": 1.34,
+      "populationMultiplier": 0.22
+    },
+    {
+      "token": "sedan",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 1.0,
+      "bodyStyle": "Sedan"
+    },
+    {
+      "token": "service",
+      "valueMultiplier": 0.98,
+      "populationMultiplier": 0.72,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "sheriff",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.08,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "shooting brake",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.18,
+      "bodyStyle": "Wagon",
+      "segment": "luxury_wagon"
+    },
+    {
+      "token": "short bed",
+      "valueMultiplier": 1.04,
+      "populationMultiplier": 0.5,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "single cab",
+      "valueMultiplier": 0.96,
+      "populationMultiplier": 0.72,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "spec r",
+      "valueMultiplier": 1.26,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "ss 1le",
+      "valueMultiplier": 1.42,
+      "populationMultiplier": 0.11
+    },
+    {
+      "token": "stance",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.3
+    },
+    {
+      "token": "state trooper",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.05,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "sti",
+      "valueMultiplier": 1.32,
+      "populationMultiplier": 0.25
+    },
+    {
+      "token": "supercharged",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.45
+    },
+    {
+      "token": "suv",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.92,
+      "bodyStyle": "SUV",
+      "segment": "suv"
+    },
+    {
+      "token": "svr",
+      "valueMultiplier": 1.46,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "taxi",
+      "valueMultiplier": 0.97,
+      "populationMultiplier": 0.28,
+      "insuranceClass": "commercial"
+    },
+    {
+      "token": "tdi",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.48
+    },
+    {
+      "token": "time attack",
+      "valueMultiplier": 1.32,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "time trial",
+      "valueMultiplier": 1.2,
+      "populationMultiplier": 0.1
+    },
+    {
+      "token": "touge",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.12
+    },
+    {
+      "token": "track pack",
+      "valueMultiplier": 1.22,
+      "populationMultiplier": 0.24
+    },
+    {
+      "token": "trackhawk",
+      "valueMultiplier": 1.55,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "trail boss",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.34,
+      "segment": "pickup_truck",
+      "bodyStyle": "Truck"
+    },
+    {
+      "token": "trailhawk",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.26,
+      "segment": "offroad_suv",
+      "bodyStyle": "SUV"
+    },
+    {
+      "token": "trd",
+      "valueMultiplier": 1.14,
+      "populationMultiplier": 0.46
+    },
+    {
+      "token": "tremor",
+      "valueMultiplier": 1.2,
+      "populationMultiplier": 0.24,
+      "segment": "pickup_truck",
+      "bodyStyle": "Truck"
+    },
+    {
+      "token": "trofeo",
+      "valueMultiplier": 1.52,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "trx",
+      "valueMultiplier": 1.48,
+      "populationMultiplier": 0.08,
+      "segment": "pickup_truck",
+      "bodyStyle": "Truck"
+    },
+    {
+      "token": "turbo",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.76
+    },
+    {
+      "token": "turbodiesel",
+      "valueMultiplier": 1.1,
+      "populationMultiplier": 0.35
+    },
+    {
+      "token": "turismo",
+      "valueMultiplier": 1.1,
+      "populationMultiplier": 0.46
+    },
+    {
+      "token": "twin turbo",
+      "valueMultiplier": 1.22,
+      "populationMultiplier": 0.3
+    },
+    {
+      "token": "type r",
+      "valueMultiplier": 1.35,
+      "populationMultiplier": 0.22
+    },
+    {
+      "token": "type rs",
+      "valueMultiplier": 1.28,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "type s",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.32
+    },
+    {
+      "token": "ute",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.12,
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "v10",
+      "valueMultiplier": 1.28,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "v12",
+      "valueMultiplier": 1.42,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "v6",
+      "valueMultiplier": 1.06,
+      "populationMultiplier": 0.95
+    },
+    {
+      "token": "v8",
+      "valueMultiplier": 1.14,
+      "populationMultiplier": 0.68
+    },
+    {
+      "token": "v8s",
+      "valueMultiplier": 1.2,
+      "populationMultiplier": 0.28
+    },
+    {
+      "token": "van",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.82,
+      "bodyStyle": "Van"
+    },
+    {
+      "token": "veloce",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.32
+    },
+    {
+      "token": "vrs",
+      "valueMultiplier": 1.18,
+      "populationMultiplier": 0.35
+    },
+    {
+      "token": "w12",
+      "valueMultiplier": 1.5,
+      "populationMultiplier": 0.03
+    },
+    {
+      "token": "wagon",
+      "valueMultiplier": 1.0,
+      "populationMultiplier": 0.92,
+      "bodyStyle": "Wagon"
+    },
+    {
+      "token": "wildtrak",
+      "valueMultiplier": 1.2,
+      "populationMultiplier": 0.18
+    },
+    {
+      "token": "work truck",
+      "valueMultiplier": 0.97,
+      "populationMultiplier": 0.42,
+      "insuranceClass": "commercial",
+      "bodyStyle": "Truck",
+      "segment": "pickup_truck"
+    },
+    {
+      "token": "xdrive",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.64
+    },
+    {
+      "token": "xdrive40i",
+      "valueMultiplier": 1.16,
+      "populationMultiplier": 0.16
+    },
+    {
+      "token": "xle",
+      "valueMultiplier": 1.08,
+      "populationMultiplier": 0.86
+    },
+    {
+      "token": "xse",
+      "valueMultiplier": 1.12,
+      "populationMultiplier": 0.62
+    },
+    {
+      "token": "z06",
+      "valueMultiplier": 1.48,
+      "populationMultiplier": 0.12
+    },
+    {
+      "token": "zl1",
+      "valueMultiplier": 1.52,
+      "populationMultiplier": 0.08
+    },
+    {
+      "token": "zr1",
+      "valueMultiplier": 1.62,
+      "populationMultiplier": 0.06
+    },
+    {
+      "token": "zr2",
+      "valueMultiplier": 1.22,
+      "populationMultiplier": 0.18,
+      "segment": "pickup_truck",
+      "bodyStyle": "Truck"
+    }
+  ]
+}

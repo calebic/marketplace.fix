@@ -1,0 +1,131 @@
+{
+  "brandTierMultipliers": {
+    "economy": 0.92,
+    "mainstream": 1.0,
+    "premium": 1.2,
+    "luxury": 1.4,
+    "exotic": 2.2
+  },
+  "segments": {
+    "commercial_van": {
+      "baseValue": 44500,
+      "basePopulation": 650
+    },
+    "compact_car": {
+      "baseValue": 23000,
+      "basePopulation": 4200
+    },
+    "compact_hatchback": {
+      "baseValue": 25500,
+      "basePopulation": 3100
+    },
+    "coupe": {
+      "baseValue": 36000,
+      "basePopulation": 900
+    },
+    "crossover": {
+      "baseValue": 33000,
+      "basePopulation": 3200
+    },
+    "drift_car": {
+      "baseValue": 46000,
+      "basePopulation": 140
+    },
+    "fullsize_sedan": {
+      "baseValue": 42000,
+      "basePopulation": 1200
+    },
+    "grand_tourer": {
+      "baseValue": 98000,
+      "basePopulation": 85
+    },
+    "hatchback": {
+      "baseValue": 21000,
+      "basePopulation": 3750
+    },
+    "heavy_duty_truck": {
+      "baseValue": 68000,
+      "basePopulation": 460
+    },
+    "hypercar": {
+      "baseValue": 1200000,
+      "basePopulation": 2
+    },
+    "kei_car": {
+      "baseValue": 11000,
+      "basePopulation": 3000
+    },
+    "luxury_sedan": {
+      "baseValue": 76000,
+      "basePopulation": 320
+    },
+    "luxury_suv": {
+      "baseValue": 68000,
+      "basePopulation": 700
+    },
+    "luxury_wagon": {
+      "baseValue": 61000,
+      "basePopulation": 220
+    },
+    "midsize_sedan": {
+      "baseValue": 32000,
+      "basePopulation": 2400
+    },
+    "minivan": {
+      "baseValue": 38000,
+      "basePopulation": 1400
+    },
+    "muscle_car": {
+      "baseValue": 50000,
+      "basePopulation": 300
+    },
+    "offroad_suv": {
+      "baseValue": 52000,
+      "basePopulation": 380
+    },
+    "pickup_truck": {
+      "baseValue": 47000,
+      "basePopulation": 1700
+    },
+    "premium_sedan": {
+      "baseValue": 52000,
+      "basePopulation": 850
+    },
+    "rally_car": {
+      "baseValue": 82000,
+      "basePopulation": 40
+    },
+    "sedan": {
+      "baseValue": 28500,
+      "basePopulation": 2750
+    },
+    "sports_car": {
+      "baseValue": 62000,
+      "basePopulation": 220
+    },
+    "subcompact_car": {
+      "baseValue": 17500,
+      "basePopulation": 5600
+    },
+    "supercar": {
+      "baseValue": 210000,
+      "basePopulation": 12
+    },
+    "suv": {
+      "baseValue": 38000,
+      "basePopulation": 2600
+    },
+    "utility_trailer": {
+      "baseValue": 8500,
+      "basePopulation": 1200
+    },
+    "van": {
+      "baseValue": 36000,
+      "basePopulation": 1100
+    },
+    "wagon": {
+      "baseValue": 34000,
+      "basePopulation": 850
+    }
+  }
+}

@@ -1,0 +1,281 @@
+﻿<Window x:Class="WpfApp1.LicensePlateManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="License Plate Manager"
+        Height="820"
+        Width="1180"
+        MinHeight="680"
+        MinWidth="940"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}">
+    <Window.Resources>
+        <Style x:Key="PlateActionRadioStyle" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="24"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Width="24" Height="24" VerticalAlignment="Center">
+                                    <Ellipse x:Name="OuterDot" Width="24" Height="24" Fill="Transparent" Stroke="{DynamicResource BorderBrush}" StrokeThickness="1.5"/>
+                                    <Ellipse x:Name="InnerDot" Width="10" Height="10" Fill="{DynamicResource AccentBrush}" Visibility="Collapsed"/>
+                                </Grid>
+                                <ContentPresenter Grid.Column="2" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                <Setter TargetName="OuterDot" Property="Stroke" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="InnerDot" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.62"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PlatePreviewGridStyle" TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="RowHeight" Value="34"/>
+            <Setter Property="ColumnHeaderHeight" Value="38"/>
+        </Style>
+
+        <Style x:Key="PlateFooterButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource AppForegroundBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="18,10"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Root" Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="18"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="18"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="18"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="18"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="18"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Style="{StaticResource AccentPanelCardBorderStyle}" Padding="20,18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="54" Height="54" CornerRadius="15" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
+                        <Viewbox Width="22" Height="22" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Canvas Width="24" Height="24">
+                                <Ellipse Canvas.Left="3" Canvas.Top="7" Width="18" Height="10" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.8"/>
+                                <Rectangle Canvas.Left="6" Canvas.Top="9" Width="12" Height="6" RadiusX="1.5" RadiusY="1.5" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.6"/>
+                                <Ellipse Canvas.Left="8" Canvas.Top="11" Width="2.5" Height="2.5" Fill="{DynamicResource AccentBrush}"/>
+                                <Ellipse Canvas.Left="13.5" Canvas.Top="11" Width="2.5" Height="2.5" Fill="{DynamicResource AccentBrush}"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="License Plate Manager" FontSize="26" FontWeight="SemiBold"/>
+                        <TextBlock Margin="0,6,0,0"
+                                   Foreground="{DynamicResource MutedForegroundBrush}"
+                                   Text="Choose whether the plate operation should target one mod, selected configs, or everything in the workspace."
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Style="{StaticResource PanelCardBorderStyle}" Padding="18">
+                <StackPanel>
+                    <TextBlock Text="Where should this apply?" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Margin="0,6,0,18"
+                               Foreground="{DynamicResource MutedForegroundBrush}"
+                               Text="Bulk Plates now supports three scopes. Pick Mod, Config, or Everything, then choose the exact target when needed."
+                               TextWrapping="Wrap"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <RadioButton x:Name="ModScopeRadioButton" Grid.Column="0" Style="{StaticResource PlateActionRadioStyle}" Checked="ScopeRadioButton_Checked" Margin="0">
+                            <StackPanel>
+                                <TextBlock Text="Mod" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Choose one loaded mod and update every matching config inside it." TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="ConfigScopeRadioButton" Grid.Column="2" Style="{StaticResource PlateActionRadioStyle}" Checked="ScopeRadioButton_Checked" Margin="0">
+                            <StackPanel>
+                                <TextBlock Text="Config" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Pick one or more individual configs from a selection list." TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="WorkspaceScopeRadioButton" Grid.Column="4" Style="{StaticResource PlateActionRadioStyle}" Checked="ScopeRadioButton_Checked" Margin="0">
+                            <StackPanel>
+                                <TextBlock Text="Everything" FontSize="16" FontWeight="SemiBold"/>
+                                <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Apply the same change to every loaded config that qualifies." TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </RadioButton>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="4" Style="{StaticResource PanelCardBorderStyle}" Padding="18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" x:Name="ModSelectionPanel">
+                        <TextBlock Text="Choose a mod" Style="{StaticResource FormFieldLabelStyle}"/>
+                        <ComboBox x:Name="ModPickerComboBox" Margin="0,10,0,0" Height="40" VerticalContentAlignment="Center" SelectionChanged="ModPickerComboBox_SelectionChanged" DisplayMemberPath="DisplayLabel"/>
+                        <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Only shown when Mod scope is selected." TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" x:Name="ConfigSelectionPanel">
+                        <TextBlock Text="Choose config(s)" Style="{StaticResource FormFieldLabelStyle}"/>
+                        <Border Margin="0,10,0,0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10" Background="{DynamicResource CardBackgroundBrush}" Padding="8">
+                            <ListBox x:Name="ConfigPickerListBox" MinHeight="170" SelectionMode="Extended" SelectionChanged="ConfigPickerListBox_SelectionChanged" DisplayMemberPath="DisplayLabel"/>
+                        </Border>
+                        <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Hold Ctrl or Shift to pick multiple configs." TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="6" Style="{StaticResource PanelCardBorderStyle}" Padding="18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="What do you want to do?" Style="{StaticResource FormFieldLabelStyle}"/>
+                        <StackPanel Margin="0,10,0,0">
+                            <RadioButton x:Name="SetPlateRadioButton" Content="Set the same plate text on everything in scope" IsChecked="True" Style="{StaticResource PlateActionRadioStyle}" Checked="ModeRadioButton_Checked"/>
+                            <RadioButton x:Name="ClearPlateRadioButton" Content="Remove hardcoded plates and return them to dynamic / player choice" Style="{StaticResource PlateActionRadioStyle}" Checked="ModeRadioButton_Checked" Margin="0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Plate text" Style="{StaticResource FormFieldLabelStyle}"/>
+                        <TextBox x:Name="PlateTextBox" Margin="0,10,0,0" Height="40" VerticalContentAlignment="Center" MaxLength="10" TextChanged="PlateTextBox_TextChanged"/>
+                        <TextBlock Margin="0,10,0,0" Foreground="{DynamicResource MutedForegroundBrush}" Text="Type the exact plate text to write into each selected .pc file. Leave this field alone when using remove mode." TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="8" Style="{StaticResource PanelCardBorderStyle}" Padding="16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="Summary" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock Grid.Row="1" Margin="0,6,0,14" Foreground="{DynamicResource MutedForegroundBrush}" Text="Double-check the target size before you apply the change." TextWrapping="Wrap"/>
+                    <Border Grid.Row="2" Background="{DynamicResource CardBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="16">
+                        <TextBlock x:Name="PreviewSummaryTextBlock" TextWrapping="Wrap" LineHeight="24"/>
+                    </Border>
+
+                    <DataGrid Grid.Row="4" x:Name="PreviewDataGrid" Style="{StaticResource PlatePreviewGridStyle}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" SelectionMode="Single" MinHeight="240">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Mod" Binding="{Binding ModName}" Width="1.25*"/>
+                            <DataGridTextColumn Header="Config" Binding="{Binding ConfigKey}" Width="1.1*"/>
+                            <DataGridTextColumn Header="Current plate" Binding="{Binding CurrentPlateDisplay}" Width="1.1*"/>
+                            <DataGridTextColumn Header="Result" Binding="{Binding ResultPlateDisplay}" Width="1.1*"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="1.45*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="10" Style="{StaticResource PanelCardBorderStyle}" Padding="16,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="12"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="FooterStatusTextBlock" VerticalAlignment="Center" Foreground="{DynamicResource MutedForegroundBrush}" Text="Set mode writes the same licenseName text to each selected .pc file." TextWrapping="Wrap" Margin="0,0,20,0"/>
+
+                    <Button x:Name="ApplyButton" Grid.Column="1" Width="150" Height="42" Content="Apply" Style="{StaticResource PlateFooterButtonStyle}" Click="Apply_Click"/>
+                    <Button Grid.Column="3" Width="150" Height="42" Content="Cancel" Style="{StaticResource PlateFooterButtonStyle}" Click="Cancel_Click"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</Window>

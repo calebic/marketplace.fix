@@ -11,7 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="beamngvehiclemarketplaceicon (1).ico" />
+    <Resource Include="beamngvehiclemarketplaceicon (1).ico" />
+    <Content Include="Data\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

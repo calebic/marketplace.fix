@@ -25,4 +25,16 @@
     <SolidColorBrush x:Key="PopupBackgroundBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="StatusBadgeBackgroundBrush" Color="#D4E2F6" />
     <SolidColorBrush x:Key="GridHeaderBackgroundBrush" Color="#CCDAEE" />
+    <SolidColorBrush x:Key="CardGlowBrush" Color="#D6E2F3" />
+    <SolidColorBrush x:Key="ShellOutlineBrush" Color="#97AEC9" />
+
+    <LinearGradientBrush x:Key="TitleBarGradientBrush" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#DCE6F4" Offset="0"/>
+        <GradientStop Color="#EEF4FC" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="AccentCardGradientBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#E7F1FC" Offset="0"/>
+        <GradientStop Color="#F8FBFF" Offset="1"/>
+    </LinearGradientBrush>
 </ResourceDictionary>
