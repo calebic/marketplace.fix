@@ -92,13 +92,3 @@ It is meant to be:
 - a more persistent long-term utility that remembers confidence, evidence, and review history
 - a stronger base for future marketplace editing, lookup, and review features
 
-## Build
-
-Open the project in Visual Studio and build in Release mode.
-
-Typical local commands:
-
-```powershell
-dotnet restore .\WpfApp1\marketplace.fixer.csproj
-dotnet build .\WpfApp1\marketplace.fixer.csproj -c Release
-dotnet run --project .\WpfApp1\marketplace.fixer.csproj
