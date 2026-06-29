@@ -1,0 +1,48 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- DialerWave dark: near-black canvas, lifted cards, cyan/teal neon accent -->
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0A0B0F" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#1B1E25" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="#121419" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#0E1014" />
+    <SolidColorBrush x:Key="InputBackgroundBrush" Color="#0C0E12" />
+    <SolidColorBrush x:Key="InputForegroundBrush" Color="#F2F5FA" />
+    <SolidColorBrush x:Key="AppForegroundBrush" Color="#F4F7FB" />
+    <SolidColorBrush x:Key="MutedForegroundBrush" Color="#8A93A6" />
+    <SolidColorBrush x:Key="FormLabelBrush" Color="#9AA4B8" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#23262E" />
+    <SolidColorBrush x:Key="StrongBorderBrush" Color="#2E323C" />
+
+    <!-- Neon accent: cyan with a teal lean, plus a gradient for signature surfaces -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#22D3EE" />
+    <SolidColorBrush x:Key="AccentForegroundBrush" Color="#05161A" />
+    <SolidColorBrush x:Key="AccentGlowBrush" Color="#3322D3EE" />
+    <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#22D3EE" Offset="0" />
+        <GradientStop Color="#2DD4BF" Offset="1" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="SuccessBrush" Color="#34D399" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FBBF24" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FB7185" />
+    <SolidColorBrush x:Key="VioletBrush" Color="#8B5CF6" />
+
+    <SolidColorBrush x:Key="SelectionBrush" Color="#15252B" />
+    <SolidColorBrush x:Key="SelectionForegroundBrush" Color="#EAFDFF" />
+
+    <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#0C0E12" />
+    <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#191C22" />
+    <SolidColorBrush x:Key="DangerButtonBackgroundBrush" Color="#2A1A20" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#1A1E25" />
+    <SolidColorBrush x:Key="PopupBackgroundBrush" Color="#14161B" />
+    <SolidColorBrush x:Key="StatusBadgeBackgroundBrush" Color="#15252B" />
+    <SolidColorBrush x:Key="GridHeaderBackgroundBrush" Color="#101216" />
+
+    <!-- Status pill colors -->
+    <SolidColorBrush x:Key="OkBadgeBackgroundBrush" Color="#13251E" />
+    <SolidColorBrush x:Key="OkBadgeBorderBrush" Color="#1F4A3A" />
+    <SolidColorBrush x:Key="OkBadgeForegroundBrush" Color="#34D399" />
+    <SolidColorBrush x:Key="MissBadgeBackgroundBrush" Color="#2A171C" />
+    <SolidColorBrush x:Key="MissBadgeBorderBrush" Color="#5A2A33" />
+    <SolidColorBrush x:Key="MissBadgeForegroundBrush" Color="#FB7185" />
+</ResourceDictionary>

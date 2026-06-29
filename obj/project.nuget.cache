@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "otoAEDQmino=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\icey7\\OneDrive\\Desktop\\test\\marketplace.fixer.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\icey7\\.nuget\\packages\\controlzex\\4.4.0\\controlzex.4.4.0.nupkg.sha512",
+    "C:\\Users\\icey7\\.nuget\\packages\\mahapps.metro\\2.4.11\\mahapps.metro.2.4.11.nupkg.sha512",
+    "C:\\Users\\icey7\\.nuget\\packages\\microsoft.xaml.behaviors.wpf\\1.1.19\\microsoft.xaml.behaviors.wpf.1.1.19.nupkg.sha512",
+    "C:\\Users\\icey7\\.nuget\\packages\\system.text.json\\4.7.2\\system.text.json.4.7.2.nupkg.sha512"
+  ],
+  "logs": []
+}
