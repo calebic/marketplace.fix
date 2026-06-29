@@ -22,7 +22,7 @@ A sleek desktop tool for **BeamNG.drive** players running the **RLS mod**. Some 
 
 | Config list & editor | Slide-in settings |
 | :---: | :---: |
-| ![Main window](https://imgur.com/a/rcgPuXy) | ![Settings panel](https://imgur.com/a/LvWMOik) |
+| ![Main window](https://i.imgur.com/gW5RcgX.png) | ![Settings panel](https://i.imgur.com/34HZoo6.png) |
 
 </div>
 
